@@ -154,6 +154,15 @@ class APIManager {
         this.requestTimeout = 30000; // <<< Increased to 30 seconds
         this.maxRetries = 2;
         this.retryDelay = 1000; // Start delay for retries
+        
+        // --- ADDED: Create a reusable httpsAgent --- 
+        this.httpsAgent = new https.Agent({
+            keepAlive: true,        // Enable keep-alive
+            maxSockets: 100,         // Allow a higher number of concurrent sockets per host
+            keepAliveMsecs: 15000,  // Keep sockets alive for 15 seconds (reduced from 30)
+            timeout: 20000        // Add a socket timeout (20 seconds)
+        });
+        // --- END Agent --- 
     }
 
     loadKeys(keysFile) {
@@ -187,28 +196,29 @@ class APIManager {
         }
 
         await this.semaphore.acquire();
-        logger.debug(`[APIManager] Semaphore acquired for ${url.split('?')[0]}. Remaining permits: ${this.semaphore.nrWaiting()} waiting.`);
+        // logger.debug(`[APIManager] Semaphore acquired for ${url.split('?')[0]}. Remaining permits: ${this.semaphore.nrWaiting()} waiting.`); // Reduced verbosity
         
         let attempt = 0;
         let lastError = null;
-        let key = null; // Define key here for outer finally scope
+        let key = null; 
+        let startTime = null; // Defined here for broader scope in catch/finally
 
         try {
             // === Start Retry Loop ===
             while (attempt <= this.maxRetries) {
-                key = null; // Reset key for each attempt
+                key = null; 
                 let keyAcquired = false;
                 
                 try {
-                    key = await this._getAvailableKey(isCategorySearch); // <<< Acquire and lock key INSIDE loop
+                    key = await this._getAvailableKey(isCategorySearch); 
                     keyAcquired = true;
                     const keyLineNum = this.keyToLineNumber.get(key) || 'Unknown';
                     const logItemId = itemId ? ` (Item: ${itemId})` : '';
-                    const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`; // Always show attempt
+                    const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`; 
                     const categoryLog = isCategorySearch ? ' [Category Search]' : '';
 
-                    logger.debug(`[Request] Key line ${keyLineNum} sending request${categoryLog}${logItemId}${attemptLog} to ${url}`);
-                    const startTime = Date.now();
+                    logger.debug(`[Request] Key line ${keyLineNum} sending request${categoryLog}${logItemId}${attemptLog} to ${url.split('?')[0]}`);
+                    startTime = Date.now(); // Set start time JUST before the request
 
                     // --- Axios Call --- 
                     const response = await axios({
@@ -219,35 +229,39 @@ class APIManager {
                             authorization: `Bearer ${key}`
                         },
                         timeout: this.requestTimeout,
+                        // --- Use the pre-configured agent --- 
+                        httpsAgent: this.httpsAgent, 
+                        // --- End Agent ---
                         ...options
                     });
 
-                    this._updateKeyTimestamp(key, isCategorySearch); // Update timestamp on success
+                    this._updateKeyTimestamp(key, isCategorySearch); 
                     const duration = Date.now() - startTime;
                     logger.info(`[Request] Success for ${url.split('?')[0]} key line ${keyLineNum}${categoryLog}${logItemId} (Status: ${response.status}, Time: ${duration}ms)`);
-                    return response; // <<< Success: Return and exit
+                    return response; 
 
                 } catch (error) {
                     // --- Error Handling for Attempt --- 
+                    // Update timestamp even on failure, key was used
                     if (key) { 
-                        this._updateKeyTimestamp(key, isCategorySearch);
+                        this._updateKeyTimestamp(key, isCategorySearch); 
                     }
+                    
                     // --- SAFELY Calculate Duration --- 
-                    let duration = -1; // Default duration
+                    let duration = -1; 
                     const keyLineNum = key ? (this.keyToLineNumber.get(key) || 'Unknown') : 'N/A';
                     const logItemId = itemId ? ` (Item: ${itemId})` : '';
                     const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`;
                     
-                    // Check if startTime was defined before using it
-                    if (key && typeof startTime !== 'undefined') { 
+                    if (startTime) { // Check if startTime was set before the error
                         duration = Date.now() - startTime;
-                    } else if (key) {
-                        // Log if key exists but startTime doesn't (indicates error before timestamp)
+                    } else {
+                        // Log if startTime wasn't set (error happened before/during request start)
                         logger.warn(`[Request] Error likely occurred before startTime was set for key ${keyLineNum}${logItemId}${attemptLog}. Duration cannot be calculated.`);
                     }
                     // --- End Safe Duration Calc ---
 
-                    lastError = error; // Store error for potential final throw
+                    lastError = error; 
 
                     if (error.response) {
                         const status = error.response.status;
@@ -255,69 +269,60 @@ class APIManager {
 
                         if (status === 404) {
                             logger.error(`[Request] Received 404 Not Found. Not retrying.`);
-                            throw error; // Rethrow 404 immediately
+                            throw error; 
                         }
                         if (status === 429) {
-                            const delay429 = 1500 + Math.random() * 1000; // Increased delay for 429
+                            const delay429 = 1500 + Math.random() * 1000; 
                             logger.warn(`[Request] Rate limit (429) hit. Applying extra delay (${delay429.toFixed(0)}ms) before next attempt.`);
                             await new Promise(resolve => setTimeout(resolve, delay429));
-                             // Loop will continue to next attempt after delay
                         }
-                        // Check if retryable (5xx)
                         else if (status >= 500 && status < 600) {
                              if (attempt < this.maxRetries) {
-                                const delay = this.retryDelay * Math.pow(2, attempt);
-                                logger.warn(`[Request] Server error ${status}. Retrying in ${delay}ms...`);
+                                const delay = this.retryDelay * Math.pow(2, attempt) + (Math.random() * 500); // Add jitter
+                                logger.warn(`[Request] Server error ${status}. Retrying in ${delay.toFixed(0)}ms...`);
                                 await new Promise(resolve => setTimeout(resolve, delay));
-                                // Loop will continue after delay
                              } else {
                                  logger.error(`[Request] Final attempt failed with server error ${status}.`);
-                                 throw error; // Max retries reached for 5xx
+                                 throw error; 
                              }
                         } else {
-                            // Non-retryable status other than 404/429/5xx
                             logger.error(`[Request] Non-retryable status ${status}.`);
                             throw error;
                         }
 
-                    } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                    } else if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
+                        // Log the calculated duration even for timeouts
                         logger.warn(`[Request] Timeout for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog} (Time: ${duration}ms)`);
                         if (attempt < this.maxRetries) {
-                            const delay = this.retryDelay * Math.pow(2, attempt);
-                            logger.warn(`[Request] Retrying timeout in ${delay}ms...`);
+                            const delay = this.retryDelay * Math.pow(2, attempt) + (Math.random() * 500); // Add jitter
+                            logger.warn(`[Request] Retrying timeout in ${delay.toFixed(0)}ms...`);
                              await new Promise(resolve => setTimeout(resolve, delay));
-                             // Loop will continue after delay
                         } else {
                              logger.error(`[Request] Final attempt failed due to timeout.`);
-                             throw error; // Max retries reached for timeout
+                             throw error; 
                         }
                     } else {
-                        // Other network errors (DNS, connection refused, etc.)
                         logger.error(`[Request] Network Error for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog}: ${error.message}`);
-                         throw error; // Don't retry unknown network errors by default
+                         throw error; 
                     }
                 } finally {
-                     // <<< ADDED: Release the key lock INSIDE loop's finally >>>
-                     if (key && keyAcquired) { // Only release if a key was successfully acquired for this attempt
+                     if (key && keyAcquired) { 
                          if (this.keyLocks.has(key)) {
                              this.keyLocks.set(key, false);
-                             logger.debug(`[APIManager] Released lock for key line ${this.keyToLineNumber.get(key)} after attempt ${attempt + 1}.`);
+                             // logger.debug(`[APIManager] Released lock for key line ${this.keyToLineNumber.get(key)} after attempt ${attempt + 1}.`); // Reduced verbosity
                          }
                      }
                 }
 
-                // Increment attempt counter before next iteration
                 attempt++;
             } // === End Retry Loop ===
             
-            // If the loop finishes without returning, it means all retries failed.
             logger.error(`[Request] Max retries (${this.maxRetries + 1}) reached for ${url.split('?')[0]}. Last error: ${lastError?.message}`);
             throw lastError || new Error('Max retries reached or unknown error');
 
         } finally {
-            logger.debug(`[APIManager] Releasing semaphore for ${url.split('?')[0]}.`);
-            this.semaphore.release(); // Always release the semaphore slot
-            // Key lock release is now handled INSIDE the loop's finally
+            // logger.debug(`[APIManager] Releasing semaphore for ${url.split('?')[0]}.`); // Reduced verbosity
+            this.semaphore.release(); 
         }
     }
 
