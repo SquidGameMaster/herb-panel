@@ -14118,3 +14118,14 @@
 {"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 1 [Category Search] (Status: 200, Time: 22609ms)","timestamp":"2025-04-13T01:18:15.481Z"}
 {"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 1 [Category Search] (Status: 200, Time: 9338ms)","timestamp":"2025-04-13T01:18:27.921Z"}
 {"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T01:18:29.623Z"}
+{"level":"info","message":"Loaded persistent statistics from stats.json","timestamp":"2025-04-13T01:23:30.817Z"}
+{"level":"info","message":"[APIManager] Initialized with 3 keys and concurrency limit of 3","timestamp":"2025-04-13T01:23:30.821Z"}
+{"level":"info","message":"Initialized cache update log stream: cache_updates.log","timestamp":"2025-04-13T01:23:30.821Z"}
+{"level":"info","message":"[CacheManager] Starting cache load process...","timestamp":"2025-04-13T01:23:30.821Z"}
+{"level":"info","message":"[CacheManager] Attempting to load cache from snapshot file: cache.json","timestamp":"2025-04-13T01:23:30.821Z"}
+{"level":"info","message":"[CacheManager] Snapshot file read in 21ms.","timestamp":"2025-04-13T01:23:30.843Z"}
+{"level":"info","message":"[CacheManager] Cache load process finished in 39ms. Final cache size: 1943 items.","timestamp":"2025-04-13T01:23:30.861Z"}
+{"level":"info","message":"SSL Certificates loaded successfully from /Users/alex/Desktop/herb-panel/certs","timestamp":"2025-04-13T01:23:30.861Z"}
+{"level":"info","message":"HTTPS Server is running on port 443 for panel.auth0ai.fun","timestamp":"2025-04-13T01:23:30.878Z"}
+{"level":"info","message":"HTTP server listening on port 3000 for redirection to HTTPS.","timestamp":"2025-04-13T01:23:30.879Z"}
+{"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T01:23:33.431Z"}

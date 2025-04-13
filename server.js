@@ -1594,8 +1594,9 @@ let httpsOptions = null;
 const certPath = path.join(__dirname, 'certs'); // Assuming certs folder is in the same directory
 
 try {
-    const privateKeyPath = path.join(certPath, 'privkey.pem');
-    const certificatePath = path.join(certPath, 'fullchain.pem');
+    // Use the exact filenames found in the certs directory
+    const privateKeyPath = path.join(certPath, 'panel.auth0ai.fun-key.pem');
+    const certificatePath = path.join(certPath, 'panel.auth0ai.fun-chain.pem'); // Use the full chain file
 
     if (fs.existsSync(privateKeyPath) && fs.existsSync(certificatePath)) {
         httpsOptions = {
@@ -1604,7 +1605,7 @@ try {
         };
         logger.info(`SSL Certificates loaded successfully from ${certPath}`);
     } else {
-        logger.warn(`SSL Certificate files (privkey.pem, fullchain.pem) not found in ${certPath}. Starting in HTTP mode only.`);
+        logger.warn(`SSL Certificate files (panel.auth0ai.fun-key.pem, panel.auth0ai.fun-chain.pem) not found in ${certPath}. Starting in HTTP mode only.`);
     }
 } catch (error) {
     logger.error(`Error reading SSL certificates: ${error.message}. Starting in HTTP mode only.`);
