@@ -151,10 +151,11 @@ class APIManager {
             // Initialized dynamically as keys are added
         };
         
-        // Track in-progress requests 
+        // Track in-progress requests (Optional: for monitoring, not used for limiting)
         this.activeRequests = 0;
-        this.maxConcurrentRequests = 12; // Maximum number of concurrent requests
-        this.concurrencySemaphore = new Sema(12); // Limit concurrency across all keys
+        // REMOVED: Concurrency management via semaphore
+        // this.maxConcurrentRequests = 12; 
+        // this.concurrencySemaphore = new Sema(12); 
     }
     
     // Method to initialize API keys
@@ -180,10 +181,10 @@ class APIManager {
         
         logger.info(`APIManager: Initialized with ${this.keys.length} API keys`);
         
-        // Set concurrency limit based on key count
-        this.maxConcurrentRequests = Math.max(3, 3 * this.keys.length);
-        this.concurrencySemaphore = new Sema(this.maxConcurrentRequests);
-        logger.info(`APIManager: Set concurrency limit to ${this.maxConcurrentRequests}`);
+        // REMOVED: Concurrency limit setting
+        // this.maxConcurrentRequests = Math.max(3, 3 * this.keys.length);
+        // this.concurrencySemaphore = new Sema(this.maxConcurrentRequests);
+        // logger.info(`APIManager: Set concurrency limit to ${this.maxConcurrentRequests}`);
         
         return true;
     }
@@ -255,24 +256,20 @@ class APIManager {
         this.lastRequestTime[apiKey][endpointType] = now;
         this.activeRequests++;
         
-        logger.debug(`Request started (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests}/${this.maxConcurrentRequests})`);
+        // Updated log to remove max concurrent requests
+        logger.debug(`Request started (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests})`);
     }
     
     // Mark request as completed
     trackRequestComplete(apiKey, endpointType) {
         this.activeRequests = Math.max(0, this.activeRequests - 1);
-        logger.debug(`Request completed (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests}/${this.maxConcurrentRequests})`);
+        // Updated log to remove max concurrent requests
+        logger.debug(`Request completed (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests})`);
     }
     
-    // Acquire a concurrency slot
-    async acquireConcurrencySlot() {
-        return this.concurrencySemaphore.acquire();
-    }
-    
-    // Release a concurrency slot
-    releaseConcurrencySlot(slot) {
-        this.concurrencySemaphore.release(slot);
-    }
+    // REMOVED: Concurrency slot methods
+    // async acquireConcurrencySlot() { ... }
+    // releaseConcurrencySlot(slot) { ... }
     
     // The main method to send a rate-limited request
     async sendRequest(endpoint, method = 'GET', data = {}, contextId = null) {
@@ -285,10 +282,10 @@ class APIManager {
         let attempts = 0;
         const retries = this.maxRetries;
         
-        // Get a concurrency slot
-        const concurrencySlot = await this.acquireConcurrencySlot();
+        // REMOVED: Concurrency slot acquisition
+        // const concurrencySlot = await this.acquireConcurrencySlot();
         
-        try {
+        // try {
             while (attempts < retries) {
                 attempts++;
                 
@@ -338,8 +335,14 @@ class APIManager {
                     if (error.response) {
                         // Handle rate limits (429) or server errors (5xx)
                         if (error.response.status === 429) {
-                            console.log(`Rate limit hit for key ${apiKey}. Waiting longer before retry...`);
-                            await new Promise(resolve => setTimeout(resolve, this.retryDelay * 3)); // Wait 3x longer on rate limits
+                            // Apply a penalty cooldown to this specific key and endpoint type
+                            const penaltyCooldown = 10000; // 10-second penalty
+                            this.lastRequestTime[apiKey][endpointType] = Date.now() + penaltyCooldown;
+                            
+                            logger.warn(`Rate limit hit for key ${apiKey.substring(0, 5)}... on ${endpointType}. Applying ${penaltyCooldown}ms penalty cooldown.`);
+                            
+                            // Wait before retrying (optional, can rely on _getBestKey wait)
+                            await new Promise(resolve => setTimeout(resolve, this.retryDelay)); 
                             continue;
                         } else if (error.response.status >= 500) {
                             // Server error, retry after delay
@@ -365,10 +368,10 @@ class APIManager {
 
             // All retries failed
             throw new Error(`API request to ${endpoint} failed after ${retries} attempts: ${lastError?.message || 'Unknown error'}`);
-        } finally {
-            // Always release the concurrency slot
-            this.releaseConcurrencySlot(concurrencySlot);
-        }
+        // } finally {
+            // REMOVED: Concurrency slot release
+            // this.releaseConcurrencySlot(concurrencySlot);
+        // }
     }
 }
 
