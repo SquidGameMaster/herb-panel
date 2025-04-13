@@ -1,0 +1,133 @@
+<div class="inventory-item" data-item-id="<%= item.item_id %>"> 
+    <div class="item-header">
+        <a href="https://lzt.market/<%= item.item_id %>" class="item-id" target="_blank">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="external-link-icon">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <%= item.item_id %>
+        </a>
+        <% let itemPrice = 'N/A';
+           if (item.item_data.price && typeof item.item_data.price === 'number') itemPrice = '$' + item.item_data.price.toFixed(2);
+           else if (item.item_data.price) itemPrice = '$' + item.item_data.price; %>
+        <span class="price"><%= itemPrice %></span>
+    </div>
+    
+    <% /* --- Per-Item Quick Stats Bar (Widgets) --- */ %>
+    <div class="item-quick-stats">
+        <% /* Value Widget */ %>
+        <div class="quick-stat">
+             <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.034-8.539a.75.75 0 10-1.068-1.06L10 9.432l-.966-.965a.75.75 0 00-1.068 1.06l1.5 1.5a.75.75 0 001.068 0l1.5-1.5zM9 6a1 1 0 011-1h2a1 1 0 110 2h-1v1a1 1 0 11-2 0V7h-.5a1 1 0 01-1-1z" /></svg> 
+            <div>
+                <span class="label">Value:</span>
+                <span class="value">$<%= item.item_data.total_value ? Number(item.item_data.total_value).toFixed(2) : '0.00' %></span>
+            </div>
+        </div>
+        <% /* Last Active Widget */ %>
+         <div class="quick-stat">
+            <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg>
+            <div>
+                <span class="label">Last Active:</span>
+                <span class="value">
+                    <% if (item.item_data.steam_last_activity) { 
+                        const d=new Date(item.item_data.steam_last_activity*1000), n=new Date(), days=Math.floor((n-d)/864e5);
+                        const fmt=d.toLocaleDateString(undefined,{ year: 'numeric', month: '2-digit', day: '2-digit' });
+                    %>
+                        <span title="<%= d.toISOString() %>" style="white-space: nowrap;"><%= fmt %></span><span class="days-ago">(<%= days %>d)</span>
+                    <% } else { %>N/A<% } %>
+                </span>
+            </div>
+        </div>
+        <% /* Items Widget */ %>
+         <div class="quick-stat">
+            <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h9.5A2.25 2.25 0 0117 4.25v11.5A2.25 2.25 0 0114.75 18h-9.5A2.25 2.25 0 013 15.75V4.25zm2-.25a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h9.5a.75.75 0 00.75-.75V4.25a.75.75 0 00-.75-.75h-9.5z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M6.5 6.75A.75.75 0 017.25 6h5.5a.75.75 0 010 1.5h-5.5A.75.75 0 016.5 6.75zM6.5 9.75A.75.75 0 017.25 9h5.5a.75.75 0 010 1.5h-5.5A.75.75 0 016.5 9.75zm.75 2.25a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5h-2.5z" clip-rule="evenodd" /></svg>
+            <div>
+                <span class="label">Items:</span>
+                <span class="value"><%= item.item_data.item_count %></span>
+            </div>
+        </div>
+        <% /* Country Widget */ %>
+         <div class="quick-stat">
+            <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.69 18.233l-.003-.006a18.25 18.25 0 01-2.93-2.05 18.797 18.797 0 01-1.705-1.996l-.011-.012a17.99 17.99 0 01-1.385-2.177l-.008-.012C3.31 11.48 3 10.75 3 10c0-3.866 3.582-7 8-7s8 3.134 8 7c0 .75-.31 1.48-.69 2.188l-.008.012a17.99 17.99 0 01-1.385 2.177l-.011.012a18.796 18.796 0 01-1.705 1.996 18.25 18.25 0 01-2.93 2.05l-.003.006a1.752 1.752 0 01-1.31 0zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" /></svg>
+            <div>
+                <span class="label">Country:</span>
+                <span class="value"><%= item.item_data.steam_country || 'N/A' %></span>
+            </div>
+        </div>
+        <% /* Hours Widget */ %>
+         <div class="quick-stat">
+             <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg>
+            <div>
+                <span class="label">Hours:</span> 
+                <span class="value">
+                    <% 
+                    let hours = '0h'; 
+                    if (item.item_data.rust_playtime_forever && Number(item.item_data.rust_playtime_forever) > 0) {
+                        hours = Number(item.item_data.rust_playtime_forever).toFixed(1) + 'h';
+                    } 
+                    %>
+                    <%= hours %> 
+                </span>
+            </div>
+        </div>
+    </div>
+    <% /* --- End Per-Item Quick Stats --- */ %>
+    
+    <% /* --- Inventory Items Section --- */ %>
+    <% if (item.item_data.items && Array.isArray(item.item_data.items) && item.item_data.items.length > 0) { %>
+        <div class="inventory-items-section">
+            <h4 class="section-title">
+                <svg class="stat-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-8.5zM6.5 15.5V14h7v1.5h-7zm0-2.5V12h7v1h-7zm0-2.5V10h7v1h-7zM6.5 8V6.5h7V8h-7z" /></svg> Inventory Items (<%= item.item_data.item_count %>)
+            </h4>
+            <div class="item-cards">
+                <% 
+                const sortedSubItems = item.item_data.items.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+                %>
+                <% sortedSubItems.forEach(function(subItem) { %>
+                    <div class="item-card" data-category="<%= subItem.category %>"> 
+                        <% 
+                        const defaultImg = 'https://community.akamai.steamstatic.com/public/images/skin_1/ico_item_default.png';
+                        const baseUrl = 'https://community.cloudflare.steamstatic.com/economy/image/';
+                        let imgPath = null;
+                        if (typeof subItem.image_url === 'string' && subItem.image_url.length > 1) {
+                            imgPath = subItem.image_url;
+                        } else if (typeof subItem.icon_url === 'string' && subItem.icon_url.length > 1) {
+                            imgPath = subItem.icon_url;
+                        }
+                        let imageUrl = imgPath ? (baseUrl + imgPath) : defaultImg;
+                        
+                        let displayTitle = 'Unknown Item'; 
+                        if (subItem.market_hash_name) {
+                            try { displayTitle = decodeURIComponent(subItem.market_hash_name); } catch (e) { displayTitle = subItem.title || 'Item'; }
+                        } else if (subItem.title) {
+                            displayTitle = subItem.title;
+                        }
+                        
+                        let displayPrice = null;
+                        if (subItem.price) {
+                             const parsedPrice = parseFloat(subItem.price);
+                             if (!isNaN(parsedPrice) && parsedPrice > 0) displayPrice = parsedPrice.toFixed(2);
+                        } 
+                        %>
+                        <img 
+                            src="<%= imageUrl %>" 
+                            alt="<%= displayTitle %>" 
+                            onerror="this.onerror=null; this.src='<%= defaultImg %>';"
+                            loading="lazy" 
+                        >
+                        <p class="item-card-title" title="<%= displayTitle %>">
+                            <%= displayTitle %>
+                        </p>
+                        <% if (displayPrice !== null) { %>
+                            <p class="item-card-price">$<%= displayPrice %></p>
+                        <% } %> 
+                    </div>
+                <% }); %>
+            </div>
+        </div>
+    <% } else { %>
+         <div class="no-items-message">No inventory items found for this account.</div>
+    <% } %>
+     <% /* --- End Inventory Items Section --- */ %>
+</div> 

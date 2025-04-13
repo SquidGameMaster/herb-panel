@@ -1,0 +1,165 @@
+<div id="filterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 01.628.74v2.288a2.25 2.25 0 01-.659 1.59l-4.682 4.683a2.25 2.25 0 00-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55a.75.75 0 01-1.118-.41l-1.938-5.814A2.25 2.25 0 005.32 12.11l-4.682-4.683A2.25 2.25 0 010 5.828V3.54a.75.75 0 01.628-.74zM2.5 4.04v1.788c0 .142.058.276.16.377L7 10.583v3.037l1.453 4.358A.75.75 0 009.25 17.5v-3.88l4.84-4.84a.75.75 0 00.16-.377V4.04C11.995 3.7 9.51 3.5 7.5 3.5S3.005 3.7 2.5 4.04z" clip-rule="evenodd" /></svg>
+                Filter Inventory
+            </h2>
+            <button class="close-btn" onclick="closeFilterModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+            </button>
+        </div>
+        
+        <form id="filterForm" onsubmit="applyFilters(event)">
+            <!-- Item Keyword Filters (Checkboxes grouped by Category) -->
+             <div class="filter-group category-filters">
+                 <label>
+                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h13A1.5 1.5 0 0118 3.5v13a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 16.5v-13zm1.5-1a.5.5 0 00-.5.5v13a.5.5 0 00.5.5h13a.5.5 0 00.5-.5v-13a.5.5 0 00-.5-.5h-13z" /><path d="M5 5.75A.75.75 0 015.75 5h8.5a.75.75 0 010 1.5h-8.5A.75.75 0 015 5.75zm0 4A.75.75 0 015.75 9h8.5a.75.75 0 010 1.5h-8.5A.75.75 0 015 9.75zm0 4A.75.75 0 015.75 13h4.5a.75.75 0 010 1.5h-4.5A.75.75 0 015 13.75z" /></svg>
+                     Filter by Specific Items
+                 </label>
+                 <div class="category-checkbox-grid">
+                     <% 
+                     const itemCategories = {
+                         Building: ["Legacy Wood", "Adobe", "Shipping Container", "Brick", "Brutalist", "Adobe Gate and Wall Pack"],
+                         Hazmat: ["Frontiersman Pack", "Abyss Pack", "Nomad Pack", "Arctic Pack", "Lumberjack Pack"],
+                         Emotes: ["Gesture Pack"],
+                         Misc: ["Ice King Pack", "Medieval Pack", "Wallpaper Starter Pack", "Weapon Racks"]
+                     };
+                     let selectedItems = query.selected_items || [];
+                     if (!Array.isArray(selectedItems)) selectedItems = [selectedItems]; // Ensure array
+                     selectedItems = selectedItems.map(item => item.toLowerCase()); // Lowercase for comparison
+                     %>
+
+                     <% Object.entries(itemCategories).forEach(([categoryName, items]) => { %>
+                         <div class="category-column">
+                             <h4><%= categoryName %></h4>
+                             <% items.forEach(itemKeyword => { 
+                                 const lowerKeyword = itemKeyword.toLowerCase();
+                                 const isChecked = selectedItems.includes(lowerKeyword);
+                             %>    
+                                 <div class="checkbox-item">
+                                     <input 
+                                         type="checkbox" 
+                                         id="filterItem_<%= lowerKeyword.replace(/\s+/g, '_') %>" 
+                                         name="selected_items" 
+                                         value="<%= itemKeyword %>" 
+                                         <%= isChecked ? 'checked' : '' %>
+                                     >
+                                     <label for="filterItem_<%= lowerKeyword.replace(/\s+/g, '_') %>"><%= itemKeyword %></label>
+                                 </div>
+                             <% }); %>
+                         </div>
+                     <% }); %>
+                     
+                     <% /* Add Custom Category Column */ %>
+                     <div class="category-column">
+                         <h4>Custom</h4>
+                         <% [
+                             "Ninja Suit", 
+                             "Frontier Decor Pack"
+                         ].forEach(itemKeyword => { 
+                             const lowerKeyword = itemKeyword.toLowerCase();
+                             const isChecked = selectedItems.includes(lowerKeyword);
+                         %>    
+                             <div class="checkbox-item">
+                                 <input 
+                                     type="checkbox" 
+                                     id="filterItem_<%= lowerKeyword.replace(/\s+/g, '_') %>" 
+                                     name="selected_items" 
+                                     value="<%= itemKeyword %>" 
+                                     <%= isChecked ? 'checked' : '' %>
+                                 >
+                                 <label for="filterItem_<%= lowerKeyword.replace(/\s+/g, '_') %>"><%= itemKeyword %></label>
+                             </div>
+                         <% }); %>
+                     </div>
+                 </div>
+             </div>
+
+            <!-- Last Active Range -->
+            <div class="filter-group">
+                <label>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg>
+                    Last Active (days ago)
+                </label>
+                <div class="range-inputs">
+                    <input type="number" id="lastActiveMin" name="last_active_min" placeholder="Min" min="0" value="<%= query.last_active_min || '' %>">
+                    <span>–</span>
+                    <input type="number" id="lastActiveMax" name="last_active_max" placeholder="Max" min="0" value="<%= query.last_active_max || '' %>">
+                </div>
+            </div>
+            
+            <!-- Item Amount Range -->
+            <div class="filter-group">
+                <label>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 015.25 2h9.5A2.25 2.25 0 0117 4.25v11.5A2.25 2.25 0 0114.75 18h-9.5A2.25 2.25 0 013 15.75V4.25zm2-.25a.75.75 0 00-.75.75v11.5c0 .414.336.75.75.75h9.5a.75.75 0 00.75-.75V4.25a.75.75 0 00-.75-.75h-9.5z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M6.5 6.75A.75.75 0 017.25 6h5.5a.75.75 0 010 1.5h-5.5A.75.75 0 016.5 6.75zM6.5 9.75A.75.75 0 017.25 9h5.5a.75.75 0 010 1.5h-5.5A.75.75 0 016.5 9.75zm.75 2.25a.75.75 0 000 1.5h2.5a.75.75 0 000-1.5h-2.5z" clip-rule="evenodd" /></svg>
+                    Item Amount
+                </label>
+                <div class="range-inputs">
+                    <input type="number" id="itemAmountMin" name="item_amount_min" placeholder="Min" min="0" value="<%= query.item_amount_min || '' %>">
+                    <span>–</span>
+                    <input type="number" id="itemAmountMax" name="item_amount_max" placeholder="Max" min="0" value="<%= query.item_amount_max || '' %>">
+                </div>
+            </div>
+
+            <!-- Hour Amount Range (NEW) -->
+            <div class="filter-group">
+                <label>
+                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg>
+                    Hours Played
+                </label>
+                <div class="range-inputs">
+                    <input type="number" id="hourAmountMin" name="hour_amount_min" placeholder="Min" min="0" step="0.1" value="<%= query.hour_amount_min || '' %>">
+                    <span>–</span>
+                    <input type="number" id="hourAmountMax" name="hour_amount_max" placeholder="Max" min="0" step="0.1" value="<%= query.hour_amount_max || '' %>">
+                </div>
+            </div>
+            
+            <!-- Sort Options -->
+            <div class="filter-group">
+                <label>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 10.5A.75.75 0 012.75 15h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 012 15.5zM4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z" clip-rule="evenodd" /></svg>
+                    Sort By
+                </label>
+                <div class="select-wrapper">
+                    <select id="modal_sort_by" name="sort_by"> <% /* Changed ID */ %>
+                        <option value="cheapest_price" <%= query.sort_by === 'cheapest_price' ? 'selected' : '' %>>Price</option>
+                        <option value="most_items" <%= query.sort_by === 'most_items' ? 'selected' : '' %>>Items</option>
+                        <option value="hours" <%= query.sort_by === 'hours' ? 'selected' : '' %>>Hours</option>
+                        <option value="cheapest_most_value" <%= query.sort_by === 'cheapest_most_value' ? 'selected' : '' %>>Best Value</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Sort Order (Radio) -->
+            <div class="filter-group">
+                <label>
+                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a.75.75 0 01.75.75v10.5a.75.75 0 01-1.5 0V3.75A.75.75 0 0110 3zM7.06 5.22a.75.75 0 011.06 0l2.25 2.25a.75.75 0 01-1.06 1.06L10 7.31l-.72.72a.75.75 0 01-1.06-1.06l2.25-2.25zm5.88 5.56a.75.75 0 01-1.06 0l-2.25 2.25a.75.75 0 01-1.06 0l-2.25-2.25a.75.75 0 111.06-1.06l.72.72 1.53-1.53a.75.75 0 011.06 0l3 3a.75.75 0 010 1.06z" clip-rule="evenodd" /></svg>
+                    Order
+                </label>
+                 <div class="bubble-group">
+                    <div class="bubble-toggle">
+                        <input type="radio" id="sortOrderAsc" name="sort_order" value="asc" <%= query.sort_order !== 'desc' ? 'checked' : '' %>> <% /* Default to asc */ %>
+                        <label for="sortOrderAsc">Ascending</label>
+                    </div>
+                    <div class="bubble-toggle">
+                        <input type="radio" id="sortOrderDesc" name="sort_order" value="desc" <%= query.sort_order === 'desc' ? 'checked' : '' %>>
+                        <label for="sortOrderDesc">Descending</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="filter-buttons">
+                <button type="button" class="secondary" onclick="clearFilters()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.58.22-2.34.424a.75.75 0 00-.51.714V16.25A2.75 2.75 0 005.75 19h8.5A2.75 2.75 0 0017 16.25V5.33a.75.75 0 00-.51-.714c-.76-.204-1.545-.347-2.34-.424V3.75A2.75 2.75 0 0011.25 1h-2.5zM7.5 3.75c0-.69.56-1.25 1.25-1.25h2.5c.69 0 1.25.56 1.25 1.25v.443c-.783.075-1.575.215-2.35.413a.75.75 0 01-.8 0c-.775-.198-1.567-.338-2.35-.413V3.75zM5.75 17.5c-.69 0-1.25-.56-1.25-1.25V6.055c.71.188 1.447.335 2.207.438a.75.75 0 00.586-.115 24.83 24.83 0 018.414 0 .75.75 0 00.586.115c.76.103 1.496.25 2.207-.438V16.25c0 .69-.56 1.25-1.25 1.25h-8.5zM8.5 9.75a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0v-4.5zm3.75 0a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>
+                    Clear Filters
+                </button>
+                <button type="submit" class="primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" /></svg>
+                    Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div> 

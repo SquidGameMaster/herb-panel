@@ -1,0 +1,843 @@
+<%- include('header') %>
+
+<div class="statistics-container">
+    <div class="page-header">
+        <h1 class="page-title">Auto Refresh Statistics</h1>
+        <div class="connection-status" id="connection-status">
+            <span class="status-dot disconnected" id="connection-dot"></span>
+            <span class="status-text" id="connection-text">Disconnected</span>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span class="status-label">Status:</span>
+        <span class="status-indicator" id="status-indicator">Idle</span>
+        <span class="status-message" id="status-message">Auto-refresh is currently disabled.</span>
+        <div class="controls">
+            <button class="btn" onclick="handleToggleButtonClick()" id="toggleBtn" data-state="start">
+                <span class="icon-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-play-circle"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                </span>
+                <span class="icon-stop" style="display: none;">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-square"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+                </span>
+                <span class="button-text">Start Auto-Refresh</span>
+            </button>
+            <button class="btn tertiary" onclick="triggerManualRefresh()" id="manualRefreshBtn" title="Run a single refresh cycle manually">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-zap"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Manual Refresh
+            </button>
+            
+            <!-- Hidden Pause/Resume/End Buttons -->
+            <button class="btn primary resume-btn" onclick="handleResumeClick()" id="resumeBtn" style="display: none;">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                 Resume Cycle
+             </button>
+             <button class="btn danger end-task-btn" onclick="handleEndTaskClick()" id="endTaskBtn" style="display: none;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  End Task
+              </button>
+        </div>
+    </div>
+
+    <div class="progress-section" id="progress-section" style="display: none;">
+        <h3>Current Cycle Progress</h3>
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+            <span class="progress-text" id="progress-text">0%</span>
+        </div>
+        <div class="progress-details">
+            <span id="progress-phase">Phase: Idle</span>
+            <span id="progress-message">Details will appear here...</span>
+            <span id="progress-eta">ETA: Calculating...</span>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stats-card">
+            <h4>Current Run</h4>
+            <div class="stat-item"><span class="label">Pages Checked:</span> <span class="value" id="stat-pages_checked">0</span></div>
+            <div class="stat-item"><span class="label">Items Added:</span> <span class="value" id="stat-items_added">0</span></div>
+            <div class="stat-item"><span class="label">Items Removed:</span> <span class="value" id="stat-items_removed">0</span></div>
+        </div>
+        <div class="stats-card">
+            <h4>Overall Statistics</h4>
+            <div class="stat-item"><span class="label">Total Runs:</span> <span class="value" id="stat-total_runs">0</span></div>
+            <div class="stat-item"><span class="label">Avg. Run Time:</span> <span class="value" id="stat-average_run_time">N/A</span></div>
+            <div class="stat-item"><span class="label">Total Items Found:</span> <span class="value" id="stat-total_items_found">0</span></div>
+        </div>
+        <div class="stats-card">
+            <h4>Last Run</h4>
+            <div class="stat-item"><span class="label">Started:</span> <span class="value" id="stat-last_run_start">N/A</span></div>
+            <div class="stat-item"><span class="label">Ended:</span> <span class="value" id="stat-last_run_end">N/A</span></div>
+            <div class="stat-item"><span class="label">Duration:</span> <span class="value" id="stat-last_run_duration">N/A</span></div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+.statistics-container {
+    width: 100%; /* Allow shrinking */
+    max-width: 1600px; /* Increased max-width */
+    margin: 0 auto; /* Keep centered */
+    padding: 2rem; /* Maintain padding */
+    box-sizing: border-box; /* Include padding in width calculation */
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.page-title {
+    margin-bottom: 0; /* Remove bottom margin as it's handled by header */
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--hover);
+    padding: 0.4rem 0.8rem;
+    border-radius: 1rem;
+    font-size: 0.85rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.status-dot.connected {
+    background-color: #10b981; /* Green */
+}
+
+.status-dot.disconnected {
+    background-color: #ef4444; /* Red */
+}
+
+.status-dot.connecting {
+    background-color: #f59e0b; /* Amber */
+    animation: pulse-amber 1.5s infinite ease-in-out;
+}
+
+.status-text {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+@keyframes pulse-amber {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background-color: var(--surface);
+    padding: 1rem 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+    min-height: 60px;
+}
+
+.status-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.status-indicator {
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-indicator.idle {
+    background-color: var(--hover);
+    color: var(--text-secondary);
+}
+
+.status-indicator.running {
+    background-color: rgba(var(--primary-rgb), 0.2);
+    color: var(--primary);
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+.status-indicator.error {
+    background-color: #fee2e2; /* Light red */
+    color: #dc2626; /* Dark red */
+}
+.dark-mode .status-indicator.error {
+     background-color: #450a0a; /* Dark red bg */
+     color: #f87171; /* Lighter red text */
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.status-message {
+    flex-grow: 1;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.controls {
+    display: flex;
+    gap: 0.75rem;
+}
+
+/* --- Button Restyling --- */
+
+/* Base button style */
+.controls .btn {
+    display: inline-flex; /* Use inline-flex for icon+text alignment */
+    align-items: center;
+    justify-content: center; /* Center content */
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem; /* Adjust padding */
+    border: 1px solid transparent; /* Start with transparent border */
+    border-radius: 0.5rem; /* Slightly more rounded */
+    font-size: 0.9rem; /* Slightly larger font */
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* Primary Button (Enable/Start) */
+.controls .btn.primary {
+    background-color: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+.controls .btn.primary:hover:not(:disabled) {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.3);
+}
+
+/* Secondary/Running/Pause Button */
+.controls .btn.running {
+    background-color: var(--surface);
+    color: var(--primary); /* Use primary color for text */
+    border: 1px solid var(--primary);
+}
+.controls .btn.running:hover:not(:disabled) {
+    background-color: rgba(var(--primary-rgb), 0.1);
+    /* border-color: var(--primary-dark); */
+}
+
+/* Tertiary Button (Manual Refresh) */
+.controls .btn.tertiary {
+    background-color: transparent;
+    color: var(--text-secondary);
+    border-color: transparent;
+}
+.controls .btn.tertiary:hover:not(:disabled) {
+    color: var(--primary);
+    background-color: var(--hover);
+    /* border-color: var(--border); Optional: add border on hover */
+}
+
+/* Danger Button (End Task) */
+.controls .btn.danger {
+    background-color: #fee2e2; /* Light red */
+    color: #dc2626; /* Dark red */
+    border-color: #fecaca; /* Lighter red border */
+}
+.controls .btn.danger:hover:not(:disabled) {
+    background-color: #fecaca;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+.dark-mode .controls .btn.danger {
+     background-color: #450a0a; /* Dark red bg */
+     color: #f87171; /* Lighter red text */
+     border-color: #7f1d1d;
+}
+.dark-mode .controls .btn.danger:hover:not(:disabled) {
+     background-color: #7f1d1d;
+     border-color: #b91c1c;
+     color: #fca5a5;
+}
+
+/* Disabled State */
+.controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Icon sizing within buttons */
+.controls .btn svg {
+     width: 18px; /* Slightly larger icons */
+     height: 18px;
+     stroke-width: 2; /* Ensure consistent stroke */
+}
+
+/* --- End Button Restyling --- */
+
+.progress-section {
+    background-color: var(--surface);
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+    min-height: 100px;
+}
+
+.progress-section h3 {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 24px;
+    background-color: var(--hover);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--primary);
+    border-radius: 12px;
+    transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 600;
+    mix-blend-mode: exclusion;
+    filter: invert(1) grayscale(1) contrast(10);
+}
+.dark-mode .progress-text {
+    mix-blend-mode: difference;
+    filter: none;
+    color: #fff;
+}
+
+
+.progress-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.stats-card {
+    background: var(--surface);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    animation: cardFadeIn 0.5s ease-out forwards;
+    opacity: 0;
+    min-height: 150px;
+}
+
+.stats-card h4 {
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.75rem;
+    color: var(--primary);
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.stat-item .label {
+    color: var(--text-secondary);
+}
+
+.stat-item .value {
+    font-weight: 500;
+    color: var(--text);
+}
+
+/* Stagger animation for cards */
+.stats-grid .stats-card:nth-child(1) { animation-delay: 0.1s; }
+.stats-grid .stats-card:nth-child(2) { animation-delay: 0.2s; }
+.stats-grid .stats-card:nth-child(3) { animation-delay: 0.3s; }
+/* Add more if needed */
+
+@keyframes cardFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Loading State for Stats */
+.stats-grid.loading .stats-card {
+    background-color: var(--hover);
+    box-shadow: none;
+    opacity: 0.6;
+    position: relative;
+    overflow: hidden; /* Needed for pseudo-element */
+    min-height: 150px; /* Ensure cards have height during load */
+}
+.stats-grid.loading .stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: loading-sweep 1.5s infinite linear;
+}
+.dark-mode .stats-grid.loading .stats-card::before {
+     background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+}
+.stats-grid.loading .stats-card > * { /* Hide content during load */
+    visibility: hidden;
+}
+
+@keyframes loading-sweep {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Scanning Animation for Progress Bar */
+.progress-bar-container.scanning::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 50px; /* Width of the scanning highlight */
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    border-radius: 12px;
+    animation: scanning-bar 2s infinite linear;
+}
+.dark-mode .progress-bar-container.scanning::after {
+     background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+}
+
+@keyframes scanning-bar {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(calc(var(--container-width, 100%) + 100px)); } /* Needs container width */
+}
+
+/* Styles for the combined Start/Stop button */
+#toggleBtn {
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+#toggleBtn.running {
+    background-color: var(--hover);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+#toggleBtn.running:hover {
+    background-color: var(--border);
+}
+
+</style>
+
+<script>
+let ws;
+let hasReceivedInitialStatus = false;
+
+// Function to format seconds into HH:MM:SS or MM:SS or X.Ys
+function formatDuration(seconds) {
+    if (seconds === null || seconds === undefined || seconds < 0) return 'N/A';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const totalSeconds = Math.round(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    const paddedSecs = String(secs).padStart(2, '0');
+    const paddedMins = String(minutes).padStart(2, '0');
+
+    if (hours > 0) {
+        return `${hours}:${paddedMins}:${paddedSecs}`;
+    }
+    return `${minutes}:${paddedSecs}`;
+}
+
+// Function to format date strings
+function formatDate(isoString) {
+    if (!isoString) return 'N/A';
+    try {
+        return new Date(isoString).toLocaleString();
+    } catch (e) {
+        return 'Invalid Date';
+    }
+}
+
+function setLoadingState(isLoading) {
+    const statsGrid = document.querySelector('.stats-grid');
+    if (isLoading) {
+        statsGrid.classList.add('loading');
+    } else {
+        statsGrid.classList.remove('loading');
+    }
+}
+
+function updateProgressBarScanning(isScanning) {
+    const progressBarContainer = document.querySelector('.progress-bar-container');
+    // Update container width CSS variable for animation
+    progressBarContainer.style.setProperty('--container-width', `${progressBarContainer.offsetWidth}px`);
+    
+    if (isScanning) {
+        progressBarContainer.classList.add('scanning');
+    } else {
+        progressBarContainer.classList.remove('scanning');
+    }
+}
+
+function updateUI(data) {
+    hasReceivedInitialStatus = true; // Mark that we have data
+    setLoadingState(false); // Remove loading state once we have data
+    
+    // Update Current Run stats using currentCounters
+    document.getElementById('stat-pages_checked').textContent = data.currentCounters?.pages_checked ?? '0';
+    document.getElementById('stat-items_added').textContent = data.currentCounters?.items_added ?? '0';
+    document.getElementById('stat-items_removed').textContent = data.currentCounters?.items_removed ?? '0';
+
+    // Update Overall and Last Run stats using lastStats
+    document.getElementById('stat-total_runs').textContent = data.lastStats?.total_runs ?? '0';
+    document.getElementById('stat-average_run_time').textContent = formatDuration(data.lastStats?.average_run_time);
+    document.getElementById('stat-total_items_found').textContent = data.lastStats?.total_items_found_all_time ?? '0';
+    document.getElementById('stat-last_run_start').textContent = formatDate(data.lastStats?.last_run_start_time);
+    document.getElementById('stat-last_run_end').textContent = formatDate(data.lastStats?.last_run_end_time);
+    document.getElementById('stat-last_run_duration').textContent = formatDuration(data.lastStats?.last_run_duration);
+
+    // Update Status Bar elements
+    const indicator = document.getElementById('status-indicator');
+    const statusMsg = document.getElementById('status-message');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const manualBtn = document.getElementById('manualRefreshBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const endTaskBtn = document.getElementById('endTaskBtn');
+    const progressSection = document.getElementById('progress-section');
+
+    // Determine status message, indicator class, currentStatus
+    let currentStatus = 'Idle';
+    let statusMessageText = 'Auto-refresh is disabled.';
+    let indicatorClass = 'idle';
+
+    if (data.isRunning) {
+        currentStatus = 'Running';
+        indicatorClass = 'running';
+        statusMessageText = data.message && data.type === 'progress' ? data.message : 'Auto-refresh cycle is currently active.'; 
+        if (data.type === 'status' && data.message) {
+             statusMessageText = data.message; 
+        }
+        progressSection.style.display = 'block';
+    } else { // Not running
+        indicatorClass = 'idle';
+        currentStatus = 'Idle';
+         if (data.isPaused) { // *** Use data.isPaused from server ***
+            statusMessageText = 'Cycle paused by user.';
+         } else if (data.isEnabled) {
+             statusMessageText = 'Auto-refresh is enabled, waiting for next cycle.';
+         } // else: stays 'Auto-refresh is disabled.'
+        progressSection.style.display = 'none';
+    }
+    if (data.type === 'error') {
+        currentStatus = 'Error';
+        indicatorClass = 'error';
+        statusMessageText = `Error: ${data.message || 'Unknown error'}`;
+        progressSection.style.display = 'none';
+        // No need to reset client-side pause flag anymore
+    }
+
+    indicator.textContent = currentStatus;
+    indicator.className = 'status-indicator ' + indicatorClass;
+    statusMsg.textContent = statusMessageText;
+
+    // --- Update Button Visibility and States --- 
+    const buttonText = toggleBtn.querySelector('.button-text');
+    const startIcon = toggleBtn.querySelector('.icon-start');
+    const stopIcon = toggleBtn.querySelector('.icon-stop');
+
+    toggleBtn.classList.remove('primary', 'running');
+    toggleBtn.style.display = 'none'; // Hide by default
+    manualBtn.style.display = 'none';
+    resumeBtn.style.display = 'none';
+    endTaskBtn.style.display = 'none';
+
+    if (data.isRunning) {
+        // Show ONLY Pause button when running
+        toggleBtn.style.display = 'inline-flex';
+        toggleBtn.dataset.state = 'stop'; 
+        buttonText.textContent = 'Pause Cycle';
+        toggleBtn.classList.add('running'); 
+        startIcon.style.display = 'none';
+        stopIcon.style.display = 'inline-block'; 
+        toggleBtn.disabled = false;
+        manualBtn.disabled = true;
+    } else if (data.isPaused) { // *** Use data.isPaused from server ***
+        // Show Resume and End Task buttons when paused by server
+        resumeBtn.style.display = 'inline-flex';
+        endTaskBtn.style.display = 'inline-flex';
+        manualBtn.style.display = 'none'; // Hide manual refresh when paused
+        toggleBtn.style.display = 'none'; 
+        manualBtn.disabled = true; // Keep manual disabled while paused state active
+    } else { // Not running and not paused 
+        manualBtn.style.display = 'inline-flex';
+        manualBtn.disabled = false;
+        toggleBtn.style.display = 'inline-flex';
+        toggleBtn.disabled = false;
+        
+        if (data.isEnabled) { 
+            toggleBtn.dataset.state = 'stop'; 
+            buttonText.textContent = 'Disable Auto-Refresh';
+            toggleBtn.classList.add('running');
+            startIcon.style.display = 'none';
+            stopIcon.style.display = 'inline-block';
+        } else { 
+            toggleBtn.dataset.state = 'start';
+            buttonText.textContent = 'Enable Auto-Refresh';
+            toggleBtn.classList.add('primary');
+            startIcon.style.display = 'inline-block';
+            stopIcon.style.display = 'none';
+        }
+    }
+    
+    updateProgressBarScanning(data.isRunning);
+}
+
+function handleProgressUpdate(data) {
+    document.getElementById('progress-section').style.display = 'block';
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const phaseEl = document.getElementById('progress-phase');
+    const messageEl = document.getElementById('progress-message');
+    const etaEl = document.getElementById('progress-eta');
+
+    const progress = Math.min(100, Math.max(0, data.progress || 0));
+    progressBar.style.width = `${progress}%`;
+    progressText.textContent = `${Math.round(progress)}%`;
+    phaseEl.textContent = `Phase: ${data.phase?.replace(/_/g, ' ') || 'Unknown'}`;
+    messageEl.textContent = data.message || 'Processing...';
+    etaEl.textContent = data.eta ? `ETA: ${formatDuration(data.eta)}` : 'ETA: Calculating...';
+
+    // Update counters if included in progress message
+    if (data.stats?.counters) {
+        document.getElementById('stat-pages_checked').textContent = data.stats.counters.pages_checked ?? '0';
+        document.getElementById('stat-items_added').textContent = data.stats.counters.items_added ?? '0';
+        document.getElementById('stat-items_removed').textContent = data.stats.counters.items_removed ?? '0';
+    }
+}
+
+function updateConnectionStatus(status, message) {
+    const dot = document.getElementById('connection-dot');
+    const text = document.getElementById('connection-text');
+    
+    dot.className = 'status-dot ' + status; // connected, disconnected, connecting
+    text.textContent = message;
+}
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    console.log(`Connecting WebSocket to: ${wsUrl}`);
+    updateConnectionStatus('connecting', 'Connecting...');
+    // Set initial loading state only if we haven't received data yet
+    if (!hasReceivedInitialStatus) {
+        setLoadingState(true);
+    }
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket connection established');
+        updateConnectionStatus('connected', 'Connected');
+        sendWsMessage({ action: 'requestStatus' });
+        // Still might be loading until first status message arrives
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            updateUI(data); // Update UI based on server state (including isPaused)
+
+            if (data.type === 'progress') {
+                handleProgressUpdate(data);
+            }
+            if (data.type === 'complete' && !data.isRunning) {
+                // ... (setTimeout to hide progress) ...
+            }
+            // ... (other message type handling) ...
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+            setLoadingState(false); // Ensure loading state removed on error
+            updateProgressBarScanning(false);
+        }
+    };
+
+    ws.onclose = (event) => {
+        console.log('WebSocket connection closed:', event.code, event.reason);
+        updateConnectionStatus('disconnected', 'Disconnected');
+        if (!hasReceivedInitialStatus) {
+             setLoadingState(true); // Show loading if we lost connection before getting data
+        }
+        updateProgressBarScanning(false); // Stop scanning on disconnect
+        setTimeout(connectWebSocket, 1000);
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        updateConnectionStatus('disconnected', 'Error');
+        setLoadingState(false); // Remove loading state on error
+        updateProgressBarScanning(false);
+    };
+}
+
+// Function to send message via WebSocket
+function sendWsMessage(message) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+    } else {
+        console.error('WebSocket is not connected.');
+    }
+}
+
+// Function to trigger manual refresh
+function triggerManualRefresh() {
+    // Check WebSocket state before sending
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('Triggering manual refresh...');
+        // Ask the server to trigger, let the server decide if it can run
+        sendWsMessage({ action: 'triggerRefresh' }); 
+    } else {
+        console.warn('Cannot trigger manual refresh: WebSocket not connected.');
+        alert('WebSocket not connected. Please wait or refresh.');
+    }
+}
+
+// Updated handler for the toggle button (Pause/Enable/Disable)
+function handleToggleButtonClick() {
+    const toggleBtn = document.getElementById('toggleBtn');
+    const currentState = toggleBtn.dataset.state;
+    let isPauseAction = false; // Flag to indicate if the stop action is intended as a pause
+    
+    if (currentState === 'start') { 
+        toggleAutoRefresh('start', false); // Definitely not a pause
+    } else if (currentState === 'stop') { // Currently showing "Pause Cycle" or "Disable Auto-Refresh"
+        // Check if it's intended as a pause by looking at the button text
+        if (toggleBtn.querySelector('.button-text').textContent.includes('Pause')) { 
+            isPauseAction = true; // Set flag to send to server
+        }
+        toggleAutoRefresh('stop', isPauseAction); // Send pause intent
+    }
+}
+
+// New handlers for Resume and End Task - Call new APIs
+async function handleResumeClick() {
+    console.log('Resume button clicked');
+    try {
+        const response = await fetch('/api/resume_refresh', { method: 'POST' });
+        const data = await response.json();
+        console.log('Resume API response:', data);
+        // UI update will come via WebSocket broadcast after server processes the request
+    } catch (error) {
+        console.error('Error calling resume API:', error);
+        // Optionally show an error message to the user
+    }
+}
+
+async function handleEndTaskClick() {
+    console.log('End Task button clicked');
+     try {
+        const response = await fetch('/api/end_task', { method: 'POST' });
+        const data = await response.json();
+        console.log('End Task API response:', data);
+        // UI update will come via WebSocket broadcast after server processes the request
+    } catch (error) {
+        console.error('Error calling end task API:', error);
+        // Optionally show an error message to the user
+    }
+}
+
+// Update toggleAutoRefresh to send the isPause flag
+async function toggleAutoRefresh(action, isPause) {
+    try {
+        const response = await fetch('/api/toggle_auto_refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // Send the isPause flag in the body
+            body: JSON.stringify({ action, isPause: !!isPause }) // Ensure boolean
+        });
+        const data = await response.json();
+        console.log('Toggle Auto-refresh API response:', data);
+        // UI updates will come via WebSocket status message
+    } catch (error) {
+        console.error('Error toggling auto-refresh:', error);
+    }
+}
+
+// Initial load
+document.addEventListener('DOMContentLoaded', () => {
+    const initialStatsJson = '<%- JSON.stringify(initialStats || {}) %>';
+    let initialStatsData = {};
+    try {
+        initialStatsData = JSON.parse(initialStatsJson);
+        hasReceivedInitialStatus = true; // We have *some* initial data
+    } catch(e) {
+        console.error("Failed to parse initial stats:", e);
+        hasReceivedInitialStatus = false;
+    }
+
+    // Update UI with potentially stale initial data
+    updateUI({
+        isRunning: false, // Assume not running until WS confirms
+        isEnabled: false, // Assume disabled until WS confirms
+        isPaused: false, // Assume not paused initially
+        lastStats: initialStatsData,
+        currentCounters: {} // Start with empty current counters
+    });
+    // Set loading state if initial parse failed or data is empty
+    if (!hasReceivedInitialStatus || Object.keys(initialStatsData).length === 0) {
+         setLoadingState(true);
+    }
+    updateConnectionStatus('disconnected', 'Initializing...');
+    connectWebSocket(); // Connect WS to get live data
+});
+
+</script>
+
+<script src="/main.js"></script>
+
+</body>
+</html> 

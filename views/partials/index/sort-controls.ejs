@@ -1,0 +1,46 @@
+<div class="sort-controls">
+    <span class="sort-label">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+        Sort Options
+    </span>
+    
+    <div class="input-group sort-group">
+        <label for="sort_by">Sort by:</label>
+        <div class="select-wrapper">
+            <select id="sort_by" name="sort_by">
+                <option value="cheapest_price" <%= query.sort_by === 'cheapest_price' ? 'selected' : '' %>>Price</option>
+                <option value="most_items" <%= query.sort_by === 'most_items' ? 'selected' : '' %>>Items</option>
+                <option value="hours" <%= query.sort_by === 'hours' ? 'selected' : '' %>>Hours</option>
+                <option value="cheapest_most_value" <%= query.sort_by === 'cheapest_most_value' ? 'selected' : '' %>>Best Value</option>
+                <% if (!query.sort_by || !['cheapest_price', 'most_items', 'hours', 'cheapest_most_value'].includes(query.sort_by)) { %>
+                    <option value="" selected>Default</option> 
+                <% } else { %>
+                    <option value="">Default</option> 
+                <% } %>
+            </select>
+        </div>
+    </div>
+    
+    <div class="input-group sort-group">
+        <label for="sort_order">Order:</label>
+        <div class="select-wrapper">
+            <select id="sort_order" name="sort_order">
+                <option value="asc" <%= query.sort_order === 'asc' || !query.sort_order ? 'selected' : '' %>>Ascending</option>
+                <option value="desc" <%= query.sort_order === 'desc' ? 'selected' : '' %>>Descending</option>
+            </select>
+        </div>
+    </div>
+    
+    <button class="btn primary" onclick="applySort()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.46L22 3z"/></svg>
+        Apply
+    </button>
+    
+    <button class="btn secondary" onclick="clearSort()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        Reset
+    </button>
+</div> 

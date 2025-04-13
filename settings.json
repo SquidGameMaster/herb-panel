@@ -1,0 +1,7 @@
+{
+  "maxPagesToCheck": 100,
+  "rateLimit": 20,
+  "perMinute": 60,
+  "refreshInterval": 300,
+  "autoRefreshEnabled": false
+}

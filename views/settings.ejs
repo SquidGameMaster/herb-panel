@@ -1,0 +1,455 @@
+<%- include('header') %>
+
+<div class="settings-container">
+    <h1 class="page-title">Settings</h1>
+
+    <div class="settings-card">
+        <div class="settings-section">
+            <h3>Theme Settings</h3>
+            <div class="setting-item">
+                <label>Color Palette</label>
+                <div class="color-palettes">
+                    <div class="palette-option" onclick="selectPalette('blue-dark')" data-palette="blue-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #2563eb"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Blue Dark</span>
+                    </div>
+                    <div class="palette-option" onclick="selectPalette('purple-dark')" data-palette="purple-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #7c3aed"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Purple Dark</span>
+                    </div>
+                    <div class="palette-option" onclick="selectPalette('green-dark')" data-palette="green-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #10b981"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Green Dark</span>
+                    </div>
+                    <div class="palette-option" onclick="selectPalette('orange-dark')" data-palette="orange-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #f97316"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Orange Dark</span>
+                    </div>
+                    <div class="palette-option" onclick="selectPalette('pink-dark')" data-palette="pink-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #ec4899"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Pink Dark</span>
+                    </div>
+                    <div class="palette-option" onclick="selectPalette('cyan-dark')" data-palette="cyan-dark">
+                        <div class="palette-preview">
+                            <div class="color primary" style="background: #06b6d4"></div>
+                            <div class="color bg" style="background: #0f172a"></div>
+                        </div>
+                        <span>Cyan Dark</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3>API Settings</h3>
+            <div class="setting-item">
+                <label>API Keys</label>
+                <div class="api-keys-info">
+                    <span>You have <%= settings.api_keys_count %> API keys configured</span>
+                    <button class="btn btn-primary" onclick="openApiKeysModal()">Manage API Keys</button>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Rate Limiting</label>
+                <div class="rate-limit-controls">
+                    <div class="input-group">
+                        <label for="rateLimit">Max requests:</label>
+                        <input type="number" id="rateLimit" name="rateLimit" value="<%= settings.rate_limit %>" min="1" max="100">
+                    </div>
+                    <div class="input-group">
+                        <label for="perMinute">Per minute:</label>
+                        <input type="number" id="perMinute" name="perMinute" value="<%= settings.per_minute %>" min="1" max="60">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3>Category Colors</h3>
+            <p class="settings-description">Customize the border colors for categorized item cards on the dashboard.</p>
+            <div class="category-color-settings">
+                <% 
+                const categories = ['building', 'hazmat', 'emote', 'misc', 'custom'];
+                const defaultColors = {
+                    building: '#a16207',
+                    hazmat: '#15803d',
+                    emote: '#6d28d9',
+                    misc: '#0369a1',
+                    custom: '#be185d'
+                };
+                %>
+                <% categories.forEach(cat => { %>
+                    <div class="setting-item color-picker-item">
+                        <label for="color_<%= cat %>"><%= cat.charAt(0).toUpperCase() + cat.slice(1) %></label>
+                        <div class="color-input-wrapper">
+                            <input type="color" id="color_<%= cat %>" name="color_<%= cat %>" data-category="<%= cat %>" value="<%= defaultColors[cat] %>">
+                            <span class="color-value" id="value_<%= cat %>"><%= defaultColors[cat] %></span>
+                            <button class="btn-reset-color" type="button" onclick="resetCategoryColor('<%= cat %>')">Reset</button>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            <button class="btn btn-secondary" onclick="resetSettings()">Reset to Defaults</button>
+        </div>
+    </div>
+</div>
+
+<!-- API Keys Modal -->
+<div id="apiKeysModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Manage API Keys</h3>
+            <span class="close-modal" onclick="closeApiKeysModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p class="api-keys-description">Add or remove API keys below. Each key should be on its own line.</p>
+            <div id="apiKeysList">
+                <!-- API keys will be loaded here -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="addApiKeyField()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Key
+                </button>
+                <div class="spacer"></div>
+                <button class="btn btn-secondary" onclick="closeApiKeysModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveApiKeys()">Save Keys</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Theme palettes moved to header.ejs
+
+// Apply a palette to the document
+function selectPalette(paletteName) {
+    // Update active state visually
+    document.querySelectorAll('.palette-option').forEach(option => {
+        option.classList.remove('active');
+        if (option.dataset.palette === paletteName) {
+            option.classList.add('active');
+        }
+    });
+
+    // Apply the palette using the global function
+    if (typeof applyTheme === 'function') {
+        applyTheme(paletteName);
+    }
+}
+
+// Save settings to the server
+async function saveSettings() {
+    try {
+        const settings = {
+            rate_limit: parseInt(document.getElementById('rateLimit').value) || 60,
+            per_minute: parseInt(document.getElementById('perMinute').value) || 1
+        };
+
+        const response = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            alert('Settings saved successfully!');
+        } else {
+            alert('Failed to save settings');
+        }
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        alert('An error occurred while saving settings');
+    }
+}
+
+// Reset settings to defaults
+function resetSettings() {
+    document.getElementById('rateLimit').value = 60;
+    document.getElementById('perMinute').value = 1;
+    
+    // Reset category colors to defaults
+    const defaultColors = {
+        building: '#a16207',
+        hazmat: '#15803d',
+        emote: '#6d28d9',
+        misc: '#0369a1',
+        custom: '#be185d'
+    };
+    Object.entries(defaultColors).forEach(([cat, color]) => {
+        const input = document.getElementById(`color_${cat}`);
+        const valueSpan = document.getElementById(`value_${cat}`);
+        if (input) input.value = color;
+        if (valueSpan) valueSpan.textContent = color;
+        // Update CSS variable immediately (optional, saveSettings will do it too)
+        document.documentElement.style.setProperty(`--category-${cat}-color`, color);
+    });
+    // Optionally clear localStorage here if reset should persist without saving
+    // localStorage.removeItem('categoryColors'); 
+    showToast('Settings reset to defaults. Click Save to apply.');
+}
+
+// Manage API keys
+let apiKeys = [];
+
+// Open the API keys modal
+function openApiKeysModal() {
+    const modal = document.getElementById('apiKeysModal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden'; // Prevent scrolling behind modal
+    
+    // Fetch current API keys
+    fetchApiKeys();
+}
+
+// Close the API keys modal
+function closeApiKeysModal() {
+    const modal = document.getElementById('apiKeysModal');
+    modal.classList.remove('active');
+    document.body.style.overflow = ''; // Restore scrolling
+}
+
+// Fetch API keys from server
+async function fetchApiKeys() {
+    try {
+        const response = await fetch('/api/keys');
+        if (response.ok) {
+            const data = await response.json();
+            apiKeys = data.keys || [];
+            renderApiKeys();
+        } else {
+            showError('Failed to load API keys');
+        }
+    } catch (error) {
+        console.error('Error fetching API keys:', error);
+        showError('Error loading API keys. Please try again.');
+    }
+}
+
+// Render API keys in the modal
+function renderApiKeys() {
+    const container = document.getElementById('apiKeysList');
+    container.innerHTML = '';
+    
+    if (apiKeys.length === 0) {
+        // Add one empty field if there are no keys
+        addApiKeyField();
+        return;
+    }
+    
+    apiKeys.forEach((key, index) => {
+        container.appendChild(createApiKeyField(key, index));
+    });
+}
+
+// Create an API key input field
+function createApiKeyField(value = '', index) {
+    const item = document.createElement('div');
+    item.className = 'api-key-item';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'api-key-input';
+    input.value = value;
+    input.placeholder = 'Enter API key...';
+    input.dataset.index = index;
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-key-btn';
+    removeBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+    `;
+    removeBtn.onclick = () => removeApiKeyField(item);
+    
+    item.appendChild(input);
+    item.appendChild(removeBtn);
+    
+    return item;
+}
+
+// Add a new API key field
+function addApiKeyField() {
+    const container = document.getElementById('apiKeysList');
+    const index = container.children.length;
+    container.appendChild(createApiKeyField('', index));
+}
+
+// Remove an API key field
+function removeApiKeyField(item) {
+    const container = document.getElementById('apiKeysList');
+    container.removeChild(item);
+    
+    // Renumber remaining fields
+    const inputs = container.querySelectorAll('.api-key-input');
+    inputs.forEach((input, idx) => {
+        input.dataset.index = idx;
+    });
+    
+    // Add an empty field if all were removed
+    if (inputs.length === 0) {
+        addApiKeyField();
+    }
+}
+
+// Save API keys to server
+async function saveApiKeys() {
+    const inputs = document.querySelectorAll('.api-key-input');
+    const keys = Array.from(inputs)
+        .map(input => input.value.trim())
+        .filter(key => key !== '');
+    
+    try {
+        const response = await fetch('/api/keys', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ keys })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            closeApiKeysModal();
+            
+            // Update key count display
+            const countDisplay = document.querySelector('.api-keys-info span');
+            if (countDisplay) {
+                countDisplay.textContent = `You have ${keys.length} API keys configured`;
+            }
+            
+            alert('API keys saved successfully!');
+        } else {
+            showError('Failed to save API keys');
+        }
+    } catch (error) {
+        console.error('Error saving API keys:', error);
+        showError('Error saving API keys. Please try again.');
+    }
+}
+
+// Show error message
+function showError(message) {
+    alert(message);
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    const modal = document.getElementById('apiKeysModal');
+    if (event.target === modal) {
+        closeApiKeysModal();
+    }
+};
+
+// Initialize the page
+document.addEventListener('DOMContentLoaded', () => {
+    // Theme application is now handled in header.ejs
+    // Load saved palette and category colors on page load
+    loadCategoryColors();
+
+    // Initialize active palette state if needed (visual only)
+    const savedPalette = localStorage.getItem('selectedPalette') || 'blue-dark';
+    document.querySelectorAll('.palette-option').forEach(option => {
+        option.classList.remove('active');
+        if (option.dataset.palette === savedPalette) {
+            option.classList.add('active');
+        }
+    });
+});
+
+// --- Category Color Functions ---
+function loadCategoryColors() {
+    const savedColors = JSON.parse(localStorage.getItem('categoryColors')) || {};
+    const categories = ['building', 'hazmat', 'emote', 'misc', 'custom'];
+    const defaultColors = {
+        building: '#a16207',
+        hazmat: '#15803d',
+        emote: '#6d28d9',
+        misc: '#0369a1',
+        custom: '#be185d'
+    };
+
+    categories.forEach(cat => {
+        const color = savedColors[cat] || defaultColors[cat];
+        const input = document.getElementById(`color_${cat}`);
+        const valueSpan = document.getElementById(`value_${cat}`);
+        
+        if (input) input.value = color;
+        if (valueSpan) valueSpan.textContent = color;
+        document.documentElement.style.setProperty(`--category-${cat}-color`, color);
+        
+        // Add event listener to update text field when color picker changes
+        if (input) {
+            input.addEventListener('input', (event) => {
+                if (valueSpan) valueSpan.textContent = event.target.value;
+                 // Optionally update CSS variable live
+                 // document.documentElement.style.setProperty(`--category-${cat}-color`, event.target.value);
+            });
+        }
+    });
+}
+
+function saveCategoryColors() {
+    const categoryColors = {};
+    const categories = ['building', 'hazmat', 'emote', 'misc', 'custom'];
+    categories.forEach(cat => {
+        const input = document.getElementById(`color_${cat}`);
+        if (input) {
+            const color = input.value;
+            categoryColors[cat] = color;
+            document.documentElement.style.setProperty(`--category-${cat}-color`, color);
+        }
+    });
+    localStorage.setItem('categoryColors', JSON.stringify(categoryColors));
+}
+
+function resetCategoryColor(category) {
+    const defaultColors = {
+        building: '#a16207',
+        hazmat: '#15803d',
+        emote: '#6d28d9',
+        misc: '#0369a1',
+        custom: '#be185d'
+    };
+    const defaultColor = defaultColors[category];
+    const input = document.getElementById(`color_${category}`);
+    const valueSpan = document.getElementById(`value_${category}`);
+    if (input) input.value = defaultColor;
+    if (valueSpan) valueSpan.textContent = defaultColor;
+    // Update CSS variable immediately (optional)
+    // document.documentElement.style.setProperty(`--category-${category}-color`, defaultColor);
+}
+
+// --- End Category Color Functions ---
+</script>
+
+<script src="/main.js"></script>
+
+</body>
+</html> 

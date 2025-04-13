@@ -1,0 +1,162 @@
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Optimized sidebar toggle with debouncing
+        let sidebarToggleTimeout = null;
+        function toggleSidebar() {
+            if (sidebarToggleTimeout) {
+                return; // Prevent rapid firing
+            }
+            
+            // Get animation duration from CSS variable
+            const animDuration = parseInt(getComputedStyle(document.documentElement)
+                .getPropertyValue('--animation-duration').trim()) || 300;
+            
+            sidebarToggleTimeout = setTimeout(() => {
+                sidebarToggleTimeout = null;
+            }, animDuration + 50); // Add a small buffer to the debounce period
+            
+            requestAnimationFrame(() => {
+                const sidebar = document.getElementById('sidebar');
+                const isCollapsed = sidebar.classList.contains('collapsed');
+                
+                // Add transition class to ensure animations run
+                sidebar.classList.add('sidebar-animating');
+                
+                // Toggle collapsed state
+                sidebar.classList.toggle('collapsed');
+                
+                // Store state in localStorage
+                localStorage.setItem('sidebarCollapsed', !isCollapsed);
+                
+                // Clean up animation class after transition completes
+                setTimeout(() => {
+                    sidebar.classList.remove('sidebar-animating');
+                }, animDuration + 50);
+            });
+        }
+
+        // Mobile menu toggle with debouncing
+        let mobileMenuTimeout = null;
+        function toggleMobileMenu() {
+            if (mobileMenuTimeout) {
+                return;
+            }
+            
+            // Get animation duration from CSS variable
+            const animDuration = parseInt(getComputedStyle(document.documentElement)
+                .getPropertyValue('--animation-duration').trim()) || 300;
+            
+            mobileMenuTimeout = setTimeout(() => {
+                mobileMenuTimeout = null;
+            }, animDuration + 50);
+            
+            requestAnimationFrame(() => {
+                const sidebar = document.getElementById('sidebar');
+                sidebar.classList.add('sidebar-animating');
+                sidebar.classList.toggle('active');
+                
+                setTimeout(() => {
+                    sidebar.classList.remove('sidebar-animating');
+                }, animDuration + 50);
+            });
+        }
+
+        // Global theme application function moved to header
+
+        // Document ready function
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize sidebar state from localStorage
+            const sidebar = document.getElementById('sidebar');
+            const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            
+            if (isCollapsed && window.innerWidth > 768) {
+                sidebar.classList.add('collapsed');
+            }
+
+            // Handle clicks outside mobile menu to close it
+            document.addEventListener('click', (e) => {
+                const sidebar = document.getElementById('sidebar');
+                const mobileToggle = document.querySelector('.mobile-menu-toggle');
+                
+                // If click is outside sidebar and toggle button, and we're on mobile
+                if (window.innerWidth <= 768 && 
+                    !sidebar.contains(e.target) && 
+                    e.target !== mobileToggle && 
+                    !mobileToggle.contains(e.target)) {
+                    sidebar.classList.remove('active');
+                }
+            });
+
+            // Apply saved theme if exists
+            const savedPalette = localStorage.getItem('selectedPalette');
+            if (savedPalette && typeof window.applyTheme === 'function') {
+                window.applyTheme(savedPalette);
+                
+                // Mark the correct palette as active if we're on the settings page
+                if (window.location.pathname === '/settings') {
+                    const paletteOption = document.querySelector(`[data-palette="${savedPalette}"]`);
+                    if (paletteOption) {
+                        paletteOption.classList.add('active');
+                    }
+                }
+            }
+        });
+    </script>
+
+    <!-- Footer Section -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <span class="copyright">© <%= new Date().getFullYear() %> Herb Panel. All rights reserved.</span>
+            </div>
+            <div class="footer-section links">
+                <a href="/privacy">Privacy Policy</a>
+                <a href="/terms">Terms of Service</a>
+                <a href="/contact">Contact Us</a>
+                <span class="version">v<%= typeof version !== 'undefined' ? version : '1.0.2' %></span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Theme selector toggle
+        function toggleThemeSelector() {
+            const selector = document.getElementById('themeSelector');
+            selector.classList.toggle('active');
+            
+            // Close selector when clicking outside
+            if (selector.classList.contains('active')) {
+                document.addEventListener('click', closeThemeSelectorOnClickOutside);
+            } else {
+                document.removeEventListener('click', closeThemeSelectorOnClickOutside);
+            }
+        }
+        
+        function closeThemeSelectorOnClickOutside(event) {
+            const selector = document.getElementById('themeSelector');
+            const toggle = document.querySelector('.theme-toggle');
+            
+            if (!selector.contains(event.target) && !toggle.contains(event.target)) {
+                selector.classList.remove('active');
+                document.removeEventListener('click', closeThemeSelectorOnClickOutside);
+            }
+        }
+        
+        // Set the active theme in selector on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('selectedPalette') || 'blue-dark';
+            const themeOptions = document.querySelectorAll('.theme-option');
+            themeOptions.forEach(option => {
+                if (option.dataset.theme === savedTheme) {
+                    option.classList.add('active');
+                }
+            });
+        });
+    </script>
+
+    <script src="/js/main.js"></script>
+</body>
+</html> 

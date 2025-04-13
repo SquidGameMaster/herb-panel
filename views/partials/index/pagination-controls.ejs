@@ -1,0 +1,68 @@
+<% if (inventory.length > itemsPerPage && totalPages > 1) { %>
+    <div class="pagination-container">
+        <div class="pagination-summary">
+            Showing <%= startIndex + 1 %>-<%= Math.min(endIndex, inventory.length) %> of <%= inventory.length %> items
+        </div>
+        <nav aria-label="Page navigation">
+            <ul class="pagination">
+                <% /* Previous Button */ %>
+                <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+                    <a class="page-link" href="#" onclick="changePage(<%= currentPage - 1 %>); return false;" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+
+                <% /* Page Number Logic */ %>
+                <% 
+                const maxPagesToShow = 5; 
+                let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+                let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+                // Adjust if we are near the end
+                if (endPage - startPage + 1 < maxPagesToShow) {
+                    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+                }
+                %>
+
+                <% /* First Page & Ellipsis (if needed) */ %>
+                <% if (startPage > 1) { %>
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="changePage(1); return false;">1</a>
+                    </li>
+                    <% if (startPage > 2) { %>
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    <% } %>
+                <% } %>
+
+                <% /* Page Number Links */ %>
+                <% for (let i = startPage; i <= endPage; i++) { %>
+                    <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+                        <a class="page-link" href="#" onclick="changePage(<%= i %>); return false;"><%= i %></a>
+                    </li>
+                <% } %>
+
+                <% /* Ellipsis & Last Page (if needed) */ %>
+                <% if (endPage < totalPages) { %>
+                    <% if (endPage < totalPages - 1) { %>
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    <% } %>
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="changePage(<%= totalPages %>); return false;"><%= totalPages %></a>
+                    </li>
+                <% } %>
+
+                <% /* Next Button */ %>
+                <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
+                    <a class="page-link" href="#" onclick="changePage(<%= currentPage + 1 %>); return false;" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+<% } else if (inventory.length > 0) { %> 
+     <div class="pagination-container"> <% /* Show summary even if only one page */ %>
+         <div class="pagination-summary">
+             Showing <%= startIndex + 1 %>-<%= Math.min(endIndex, inventory.length) %> of <%= inventory.length %> items
+         </div>
+     </div>
+<% } %> 

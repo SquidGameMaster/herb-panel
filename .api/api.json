@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "apis": [
+    {
+      "identifier": "lzt-market",
+      "source": "@lzt-market/v1.0#2v1qzhh58m9bn9l13",
+      "integrity": "sha512-esJY5QDps64YNK0EItJRmKt87jGEglPHMISzYVchXI96D50fVJZbFu4Oi+hqJeitvYL+1i06mMfERZV37gnK1Q==",
+      "installerVersion": "6.1.3"
+    }
+  ]
+}
