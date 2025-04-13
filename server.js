@@ -9,6 +9,7 @@ const { Worker } = require('worker_threads');
 const WebSocket = require('ws');
 const { Sema } = require('async-sema');
 const https = require('https');
+const constants = require('constants'); // <-- Require constants for SSL options
 
 // Initialize Express app
 const app = express();
@@ -155,12 +156,15 @@ class APIManager {
         this.baseRetryDelay = 1500; // Base delay for FIRST retry (increased slightly)
         this.requestTimeout = 5000; // Significantly reduced request timeout
         
-        // --- RE-ENABLE httpsAgent with moderate settings ---
+        // --- RE-ENABLE httpsAgent with moderate settings AND TLS options ---
         this.httpsAgent = new https.Agent({
             keepAlive: true,
             maxSockets: 100, 
             keepAliveMsecs: 15000, // Keep sockets alive for 15 seconds
-            timeout: 20000        // Agent connection timeout (longer than request timeout)
+            timeout: 20000,
+            // --- Force TLSv1.2+ --- 
+            secureOptions: constants.SSL_OP_NO_TLSv1 | constants.SSL_OP_NO_TLSv1_1
+            // --- End TLS options --- 
         });
         // --- END Agent ---
     }
