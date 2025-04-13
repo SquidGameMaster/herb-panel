@@ -229,9 +229,10 @@ class APIManager {
                             authorization: `Bearer ${key}`
                         },
                         timeout: this.requestTimeout,
-                        // --- Use the pre-configured agent --- 
-                        httpsAgent: this.httpsAgent, 
-                        // --- End Agent ---
+                        // --- Disable agent pooling/keep-alive --- 
+                        httpAgent: false, 
+                        httpsAgent: false,
+                        // --- End Agent Disable --- 
                         ...options
                     });
 
