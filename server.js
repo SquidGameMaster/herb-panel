@@ -151,18 +151,18 @@ class APIManager {
             this.semaphore = new Sema(1);
             logger.warn('[APIManager] No keys loaded, setting concurrency limit to 1.');
         }
-        this.requestTimeout = 30000; // <<< Increased to 30 seconds
-        this.maxRetries = 2;
-        this.retryDelay = 1000; // Start delay for retries
+        this.maxRetries = 2; // Keep retries
+        this.baseRetryDelay = 1500; // Base delay for FIRST retry (increased slightly)
+        this.requestTimeout = 5000; // Significantly reduced request timeout
         
-        // --- ADDED: Create a reusable httpsAgent --- 
+        // --- RE-ENABLE httpsAgent with moderate settings ---
         this.httpsAgent = new https.Agent({
-            keepAlive: true,        // Enable keep-alive
-            maxSockets: 100,         // Allow a higher number of concurrent sockets per host
-            keepAliveMsecs: 15000,  // Keep sockets alive for 15 seconds (reduced from 30)
-            timeout: 20000        // Add a socket timeout (20 seconds)
+            keepAlive: true,
+            maxSockets: 100, 
+            keepAliveMsecs: 15000, // Keep sockets alive for 15 seconds
+            timeout: 20000        // Agent connection timeout (longer than request timeout)
         });
-        // --- END Agent --- 
+        // --- END Agent ---
     }
 
     loadKeys(keysFile) {
@@ -228,11 +228,11 @@ class APIManager {
                             accept: 'application/json',
                             authorization: `Bearer ${key}`
                         },
-                        timeout: this.requestTimeout,
-                        // --- Disable agent pooling/keep-alive --- 
-                        httpAgent: false, 
-                        httpsAgent: false,
-                        // --- End Agent Disable --- 
+                        timeout: this.requestTimeout, // Use the shorter timeout
+                        // --- Use the re-enabled agent --- 
+                        httpAgent: this.httpsAgent, // Use agent for http too if needed, else false
+                        httpsAgent: this.httpsAgent,
+                        // --- End Agent --- 
                         ...options
                     });
 
@@ -264,6 +264,14 @@ class APIManager {
 
                     lastError = error; 
 
+                    // --- Calculate Delay --- 
+                    let delay = this.baseRetryDelay; // Start with base delay
+                    if (attempt > 0) { // Exponential backoff for subsequent retries
+                        delay = this.baseRetryDelay * Math.pow(2, attempt); 
+                    }
+                    delay += (Math.random() * 500); // Add jitter
+                    // --- End Delay Calculation --- 
+
                     if (error.response) {
                         const status = error.response.status;
                         logger.warn(`[Request] Failed for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog} (Status: ${status}, Time: ${duration}ms)`);
@@ -276,10 +284,10 @@ class APIManager {
                             const delay429 = 1500 + Math.random() * 1000; 
                             logger.warn(`[Request] Rate limit (429) hit. Applying extra delay (${delay429.toFixed(0)}ms) before next attempt.`);
                             await new Promise(resolve => setTimeout(resolve, delay429));
+                            // Note: We might still want to increment attempt here or break if 429 persists?
                         }
                         else if (status >= 500 && status < 600) {
                              if (attempt < this.maxRetries) {
-                                const delay = this.retryDelay * Math.pow(2, attempt) + (Math.random() * 500); // Add jitter
                                 logger.warn(`[Request] Server error ${status}. Retrying in ${delay.toFixed(0)}ms...`);
                                 await new Promise(resolve => setTimeout(resolve, delay));
                              } else {
@@ -292,10 +300,8 @@ class APIManager {
                         }
 
                     } else if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
-                        // Log the calculated duration even for timeouts
                         logger.warn(`[Request] Timeout for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog} (Time: ${duration}ms)`);
                         if (attempt < this.maxRetries) {
-                            const delay = this.retryDelay * Math.pow(2, attempt) + (Math.random() * 500); // Add jitter
                             logger.warn(`[Request] Retrying timeout in ${delay.toFixed(0)}ms...`);
                              await new Promise(resolve => setTimeout(resolve, delay));
                         } else {
