@@ -14113,3 +14113,8 @@
 {"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 3 [Category Search] (Status: 200, Time: 18371ms)","timestamp":"2025-04-13T01:17:41.443Z"}
 {"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 2 [Category Search] (Status: 200, Time: 15646ms)","timestamp":"2025-04-13T01:17:45.358Z"}
 {"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 1 [Category Search] (Status: 200, Time: 17393ms)","timestamp":"2025-04-13T01:17:49.772Z"}
+{"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 3 [Category Search] (Status: 200, Time: 21820ms)","timestamp":"2025-04-13T01:18:06.364Z"}
+{"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 2 [Category Search] (Status: 200, Time: 22396ms)","timestamp":"2025-04-13T01:18:10.855Z"}
+{"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 1 [Category Search] (Status: 200, Time: 22609ms)","timestamp":"2025-04-13T01:18:15.481Z"}
+{"level":"info","message":"[Request] Success for https://api.lzt.market/steam key line 1 [Category Search] (Status: 200, Time: 9338ms)","timestamp":"2025-04-13T01:18:27.921Z"}
+{"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T01:18:29.623Z"}
