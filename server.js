@@ -307,7 +307,7 @@ class APIManager {
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
-                            'X-Api-Key': apiKey
+                            'Authorization': `Bearer ${apiKey}`
                         }
                     };
                     
