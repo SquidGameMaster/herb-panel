@@ -154,7 +154,7 @@ class APIManager {
         }
         this.maxRetries = 2; // Keep retries
         this.baseRetryDelay = 1500; // Base delay for FIRST retry (increased slightly)
-        this.requestTimeout = 5000; // Significantly reduced request timeout
+        this.requestTimeout = 30000; // Increase request timeout back to 30 seconds
         
         // --- RE-ENABLE httpsAgent with moderate settings AND TLS options ---
         this.httpsAgent = new https.Agent({
@@ -778,14 +778,17 @@ async function autoRefresh(resumeState = null) {
             const processing_start_time = Date.now(); 
             const PROGRESS_UPDATE_INTERVAL = Math.max(1, Math.floor(totalAddedToProcess / 20)); // Update progress roughly 20 times, minimum 1
             let itemsProcessedSinceLastUpdate = 0;
-            let estimatedTotalTime = null; // Calculate later
+            let estimatedTotalTime = null; 
 
             broadcast({ type: 'progress', phase: 'process_added', message: `Fetching details for ${totalAddedToProcess - startAddedIndex} new items...`, progress: currentProgress, eta: null });
 
-            const processingPromises = [];
+            // --- Change from parallel to sequential processing --- 
+            // const processingPromises = []; // Removed
             for (let i = startAddedIndex; i < totalAddedToProcess; i++) {
                  const item = addedItems[i];
-                if (forceStopCycle) {
+                 
+                 // Check for interruption before processing this item
+                 if (forceStopCycle) {
                     if (isPausedByUser) {
                         pausedCycleState = { phase: 'process_added', data: { addedItems, removedItems, currentAddedIndex: i, allItemsInfo } }; 
                         logger.info(`Saving state before processing added item index ${i} and pausing.`);
@@ -793,82 +796,80 @@ async function autoRefresh(resumeState = null) {
                     throw new Error(`Cycle interrupted during added processing at index ${i}.`);
                 }
                 
-                processingPromises.push(
-                    // Call BOTH endpoints concurrently
-                    Promise.all([
-                        getSteamInventoryDetails(item.item_id), // Gets { items, totalValue, itemCount, ...? }
-                        getAccountDetails(item.item_id)       // Gets { account_last_activity, steam_country, steam_full_games, steamTransactions, ... }
-                    ]).then(([inventoryDetails, accountDetails]) => {
-                        
-                        // <<< Log the details received from BOTH endpoints >>>
-                        logger.debug(`DEBUG (Inventory): Details received for item ${item.item_id}: ${JSON.stringify(inventoryDetails, null, 2)}`);
-                        logger.debug(`DEBUG (Account): Details received for item ${item.item_id}: ${JSON.stringify(accountDetails, null, 2)}`);
-                        // <<< End Log >>>
-                        
-                        // Check if *both* calls were successful enough to proceed
-                        // We definitely need inventoryDetails to get items/value.
-                        // Account details might be partially okay if null.
-                        if (inventoryDetails) { 
-                            // --- Combine data from both responses --- 
-                            const combinedData = {
-                                // From pagination
-                                price: item.price, 
-                                query: item.query, 
-                                // From getSteamInventoryDetails (inventoryDetails) - Access via inventoryDetails.data
-                                total_value: inventoryDetails?.data?.totalValue || 0, 
-                                item_count: inventoryDetails?.data?.itemCount || 0, 
-                                items: inventoryDetails?.data?.items || [], // The actual inventory items/skins
-                                // From getAccountDetails (accountDetails) - add null checks
-                                steam_last_activity: accountDetails?.account_last_activity || item.steam_last_activity || null,
-                                steam_country: accountDetails?.steam_country || null,
-                                rust_playtime_forever: accountDetails?.steam_full_games?.list?.['252490']?.playtime_forever || 0,
-                                steam_transactions: (accountDetails?.steamTransactions || []).map(t => t.product).filter(p => p),
-                                // Add any other fields from accountDetails if needed
-                            };
-                            // --- End Combination ---
+                try {
+                    // Await the Promise.all for *this specific item* before proceeding
+                    const [inventoryDetails, accountDetails] = await Promise.all([
+                        getSteamInventoryDetails(item.item_id),
+                        getAccountDetails(item.item_id)
+                    ]);
 
-                            cacheManager.addOrUpdateItem(item.item_id, combinedData);
-                            counters.items_added++; 
-                            return { itemId: item.item_id, status: 'added' };
-                        } else {
-                             // Log which part failed if inventoryDetails is missing
-                             logger.warn(`Failed to get essential Steam INVENTORY details for added item ${item.item_id}. Account details: ${accountDetails ? 'OK' : 'Failed/Null'}. Cannot add to cache.`);
-                             return { itemId: item.item_id, status: 'failed' };
-                        }
-                    }).catch(error => {
-                         logger.error(`Unhandled error processing item ${item.item_id} (Promise.all): ${error.message}`);
-                         return { itemId: item.item_id, status: 'failed' };
-                    }).finally(() => {
-                        // --- Update progress after each promise resolves or rejects ---
-                        itemsProcessedSinceLastUpdate++;
-                        const totalItemsProcessed = i + 1; // Use loop index + 1 for total processed so far
-                        
-                        if (itemsProcessedSinceLastUpdate >= PROGRESS_UPDATE_INTERVAL || totalItemsProcessed === totalAddedToProcess) {
-                            currentProgress = 35 + Math.round((totalItemsProcessed / totalAddedToProcess) * 60); // Allocate 60% to this phase
-                            const timeElapsed = Date.now() - processing_start_time;
-                            estimatedTotalTime = (timeElapsed / totalItemsProcessed) * totalAddedToProcess; // Recalculate total ETA
-                            const estimatedRemaining = estimatedTotalTime - timeElapsed;
-                            
-                            broadcast({
-                                type: 'progress',
-                                phase: 'process_added',
-                                message: `Processed ${totalItemsProcessed}/${totalAddedToProcess} added items...`,
-                                progress: Math.min(95, currentProgress), // Cap progress at 95 until finalization
-                                eta: estimatedRemaining > 0 ? (estimatedRemaining / 1000).toFixed(0) : 0
-                             });
-                             itemsProcessedSinceLastUpdate = 0; // Reset counter
-                        }
-                        // -----------------------------------------------------------
-                    })
-                );
-            }
+                    // <<< Log the details received from BOTH endpoints >>>
+                    logger.debug(`DEBUG (Inventory): Details received for item ${item.item_id}: ${JSON.stringify(inventoryDetails, null, 2)}`);
+                    logger.debug(`DEBUG (Account): Details received for item ${item.item_id}: ${JSON.stringify(accountDetails, null, 2)}`);
+                    // <<< End Log >>>
+
+                    if (inventoryDetails) {
+                        // Combine and add to cache (logic remains the same)
+                        const combinedData = {
+                            price: item.price,
+                            query: item.query,
+                            total_value: inventoryDetails?.data?.totalValue || 0,
+                            item_count: inventoryDetails?.data?.itemCount || 0,
+                            items: inventoryDetails?.data?.items || [],
+                            steam_last_activity: accountDetails?.account_last_activity || item.steam_last_activity || null,
+                            steam_country: accountDetails?.steam_country || null,
+                            rust_playtime_forever: accountDetails?.steam_full_games?.list?.['252490']?.playtime_forever || 0,
+                            steam_transactions: (accountDetails?.steamTransactions || []).map(t => t.product).filter(p => p),
+                        };
+                        cacheManager.addOrUpdateItem(item.item_id, combinedData);
+                        counters.items_added++;
+                        // Optionally: broadcast individual item addition here if needed
+                    } else {
+                        logger.warn(`Failed to get essential Steam INVENTORY details for added item ${item.item_id}. Account details: ${accountDetails ? 'OK' : 'Failed/Null'}. Cannot add to cache.`);
+                    }
+                } catch (error) {
+                    // Log error from Promise.all or the processing block
+                    logger.error(`Error processing details for added item ${item.item_id}: ${error.message}`);
+                }
+
+                // --- Update progress after processing each item --- 
+                itemsProcessedSinceLastUpdate++;
+                const totalItemsProcessed = i + 1 - startAddedIndex; // Track items processed in *this run* 
+                const overallTotalProcessed = i + 1;
+                
+                if (itemsProcessedSinceLastUpdate >= PROGRESS_UPDATE_INTERVAL || overallTotalProcessed === totalAddedToProcess) {
+                    currentProgress = 35 + Math.round((overallTotalProcessed / totalAddedToProcess) * 60); 
+                    const timeElapsed = Date.now() - processing_start_time;
+                    
+                    // Estimate ETA based on items processed in this run
+                    if (totalItemsProcessed > 0) { 
+                        estimatedTotalTime = (timeElapsed / totalItemsProcessed) * (totalAddedToProcess - startAddedIndex);
+                        const estimatedRemaining = estimatedTotalTime - timeElapsed;
+                        broadcast({
+                            type: 'progress',
+                            phase: 'process_added',
+                            message: `Processed ${overallTotalProcessed}/${totalAddedToProcess} added items...`,
+                            progress: Math.min(95, currentProgress),
+                            eta: estimatedRemaining > 0 ? (estimatedRemaining / 1000).toFixed(0) : 0
+                         });
+                    } else { // Avoid division by zero if no items processed yet in this run
+                        broadcast({
+                            type: 'progress',
+                            phase: 'process_added',
+                            message: `Processed ${overallTotalProcessed}/${totalAddedToProcess} added items...`,
+                            progress: Math.min(95, currentProgress),
+                            eta: null 
+                         });
+                    }
+                     itemsProcessedSinceLastUpdate = 0; 
+                }
+                // -------------------------------------------------
+            } // End FOR loop for addedItems
             
-            // Wait for all item processing promises to settle
-            const chunkResults = await Promise.allSettled(processingPromises);
-            
-            const successes = chunkResults.filter(r => r.status === 'fulfilled' && r.value.status === 'added').length;
-            const failures = chunkResults.length - successes;
-            logger.info(`Finished processing added items. Successes: ${successes}, Failures: ${failures}.`);
+            // No need to await processingPromises anymore
+            // const chunkResults = await Promise.allSettled(processingPromises);
+            // // --- Calculate success/failure based on counters or log analysis if needed ---
+            logger.info(`Finished processing ${totalAddedToProcess} added items sequentially.`);
             currentProgress = 95; // Progress after adding is done
             broadcast({ type: 'progress', phase: 'process_added', message: 'Finished processing added items.', progress: currentProgress, eta: 0 });
         }
