@@ -128,299 +128,252 @@ function saveStats() {
 }
 loadStats(); // Load stats on startup
 
-// API Manager class - Updated
+// API Manager class - Updated with endpoint-specific rate limiting
 class APIManager {
-    constructor(keysFile, rateLimit = 20) {
+    constructor() {
+        // Initialize API keys (can be set later)
         this.keys = [];
-        this.rateLimit = rateLimit; // General limit (requests per minute per key - maybe adjust?)
-        this.keyLastRequestTime = new Map();
-        this.keyCategorySearchCooldown = new Map(); // For category search (3.1s cooldown)
-        this.keyInventoryDetailsCooldown = new Map(); // For inventory detail endpoint (2.5s cooldown)
-        this.keyAccountDetailsCooldown = new Map(); // For account details endpoint (1.5s cooldown)
-        this.keyToLineNumber = new Map();
-        this.keyLocks = new Map();
-        this.loadKeys(keysFile);
-        // Initialize Semaphore - limit concurrency to number of keys
-        if (this.keys.length > 0) {
-            this.semaphore = new Sema(this.keys.length);
-            this.keys.forEach(key => {
-                this.keyLocks.set(key, false);
-                this.keyLastRequestTime.set(key, 0);
-                this.keyCategorySearchCooldown.set(key, 0);
-                this.keyInventoryDetailsCooldown.set(key, 0);
-                this.keyAccountDetailsCooldown.set(key, 0);
-            });
-            logger.info(`[APIManager] Initialized with ${this.keys.length} keys and concurrency limit of ${this.keys.length}`);
-        } else {
-            // Handle case with no keys to avoid semaphore error
-            this.semaphore = new Sema(1);
-            logger.warn('[APIManager] No keys loaded, setting concurrency limit to 1.');
-        }
-        this.maxRetries = 2; // Reduce retries from 3 to 2 to avoid excessive wait time
-        this.baseRetryDelay = 1000; // Reduced from 1500ms
-        this.requestTimeout = 15000; // Increased timeout from 7000ms to 15000ms
         
-        // --- RE-ENABLE httpsAgent with moderate settings AND TLS options ---
-        this.httpsAgent = new https.Agent({
-            keepAlive: true,
-            maxSockets: 50, // Reduced from 100 to avoid overwhelming connections
-            keepAliveMsecs: 15000, // Keep sockets alive for 15 seconds
-            timeout: 20000,
-            // --- Force TLSv1.2+ --- 
-            secureOptions: constants.SSL_OP_NO_TLSv1 | constants.SSL_OP_NO_TLSv1_1
-            // --- End TLS options --- 
+        // Configure request settings
+        this.requestTimeoutMs = 30000; // 30-second timeout
+        this.maxRetries = 3; // Maximum number of retry attempts
+        this.retryDelay = 2000; // Base delay between retries (ms)
+        
+        // Rate limiting - cooldown periods in milliseconds
+        this.cooldowns = {
+            standard: 500, // General API: 120 requests per minute (500ms)
+            category_search: 3000, // Category/Search methods: 20 requests per minute (3s)
+            steam_value: 3000 // Steam inventory value: 20 requests per minute (3s)
+        };
+        
+        // Timestamp tracking for last request per endpoint type per key
+        this.lastRequestTime = {
+            // Initialized dynamically as keys are added
+        };
+        
+        // Track in-progress requests 
+        this.activeRequests = 0;
+        this.maxConcurrentRequests = 12; // Maximum number of concurrent requests
+        this.concurrencySemaphore = new AsyncSemaphore(12); // Limit concurrency across all keys
+    }
+    
+    // Method to initialize API keys
+    initializeKeys(apiKeys) {
+        if (!apiKeys || !Array.isArray(apiKeys) || apiKeys.length === 0) {
+            logger.error('APIManager: No API keys provided');
+            return false;
+        }
+        
+        // Reset the keys array 
+        this.keys = [...apiKeys];
+        
+        // Initialize timestamps for each key and endpoint type
+        this.keys.forEach(key => {
+            if (!this.lastRequestTime[key]) {
+                this.lastRequestTime[key] = {
+                    standard: 0,
+                    category_search: 0,
+                    steam_value: 0
+                };
+            }
         });
-        // --- END Agent ---
-    }
-
-    loadKeys(keysFile) {
-        try {
-            const lines = fs.readFileSync(keysFile, 'utf8').split('\n');
-            let loadedKeys = 0;
-            lines.forEach((line, index) => {
-                const key = line.trim();
-                if (key) {
-                    this.keys.push(key);
-                    this.keyLastRequestTime.set(key, 0);
-                    this.keyCategorySearchCooldown.set(key, 0);
-                    this.keyInventoryDetailsCooldown.set(key, 0);
-                    this.keyAccountDetailsCooldown.set(key, 0);
-                    this.keyToLineNumber.set(key, index + 1);
-                    this.keyLocks.set(key, false);
-                    loadedKeys++;
-                }
-            });
-            if (loadedKeys === 0) throw new Error('No valid API keys found');
-            logger.debug(`Loaded ${loadedKeys} API keys`);
-        } catch (error) {
-            logger.error(`Error loading API keys: ${error.message}`);
-            // Don't throw here, let constructor handle logging the warning
-        }
-    }
-
-    // Main function to send requests, handles semaphore, per-key delay, and retries
-    async sendRequest(url, method = 'GET', options = {}, itemId = null, requestType = 'standard') {
-        if (this.keys.length === 0) {
-            logger.error('[APIManager] No API keys available to send request.');
-            throw new Error('No API keys loaded');
-        }
-
-        await this.semaphore.acquire();
         
-        let attempt = 0;
-        let lastError = null;
-        let key = null; 
-        let startTime = null; // Defined here for broader scope in catch/finally
-
-        try {
-            // === Start Retry Loop ===
-            while (attempt <= this.maxRetries) {
-                key = null; 
-                let keyAcquired = false;
-                
-                try {
-                    key = await this._getAvailableKey(requestType); 
-                    keyAcquired = true;
-                    const keyLineNum = this.keyToLineNumber.get(key) || 'Unknown';
-                    const logItemId = itemId ? ` (Item: ${itemId})` : '';
-                    const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`; 
-                    const requestTypeLog = requestType !== 'standard' ? ` [${requestType}]` : '';
-
-                    logger.debug(`[Request] Key line ${keyLineNum} sending request${requestTypeLog}${logItemId}${attemptLog} to ${url.split('?')[0]}`);
-                    startTime = Date.now(); // Set start time JUST before the request
-
-                    // --- Axios Call --- 
-                    const response = await axios({
-                        method,
-                        url,
-                        headers: {
-                            accept: 'application/json',
-                            authorization: `Bearer ${key}`
-                        },
-                        timeout: this.requestTimeout,
-                        httpAgent: this.httpsAgent,
-                        httpsAgent: this.httpsAgent,
-                        ...options
-                    });
-
-                    this._updateKeyTimestamp(key, requestType); 
-                    const duration = Date.now() - startTime;
-                    logger.info(`[Request] Success for ${url.split('?')[0]} key line ${keyLineNum}${requestTypeLog}${logItemId} (Status: ${response.status}, Time: ${duration}ms)`);
-                    return response; 
-
-                } catch (error) {
-                    // Update timestamp even on failure, key was used
-                    if (key) { 
-                        this._updateKeyTimestamp(key, requestType); 
-                    }
-                    
-                    let duration = -1; 
-                    const keyLineNum = key ? (this.keyToLineNumber.get(key) || 'Unknown') : 'N/A';
-                    const logItemId = itemId ? ` (Item: ${itemId})` : '';
-                    const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`;
-                    
-                    if (startTime) {
-                        duration = Date.now() - startTime;
-                    } else {
-                        logger.warn(`[Request] Error likely occurred before startTime was set for key ${keyLineNum}${logItemId}${attemptLog}. Duration cannot be calculated.`);
-                    }
-
-                    lastError = error; 
-
-                    let delay = this.baseRetryDelay; // Start with base delay
-                    if (attempt > 0) {
-                        delay = this.baseRetryDelay * Math.pow(2, attempt); 
-                    }
-                    delay += (Math.random() * 500); // Add jitter
-
-                    if (error.response) {
-                        const status = error.response.status;
-                        logger.warn(`[Request] Failed for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog} (Status: ${status}, Time: ${duration}ms)`);
-
-                        if (status === 404) {
-                            logger.error(`[Request] Received 404 Not Found. Not retrying.`);
-                            throw error; 
-                        }
-                        if (status === 429) {
-                            const delay429 = 1500 + Math.random() * 1000; 
-                            logger.warn(`[Request] Rate limit (429) hit. Applying extra delay (${delay429.toFixed(0)}ms) before next attempt.`);
-                            await new Promise(resolve => setTimeout(resolve, delay429));
-                        }
-                        else if (status >= 500 && status < 600) {
-                             if (attempt < this.maxRetries) {
-                                logger.warn(`[Request] Server error ${status}. Retrying in ${delay.toFixed(0)}ms...`);
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                             } else {
-                                 logger.error(`[Request] Final attempt failed with server error ${status}.`);
-                                 throw error; 
-                             }
-                        } else {
-                            logger.error(`[Request] Non-retryable status ${status}.`);
-                            throw error;
-                        }
-
-                    } else if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
-                        logger.warn(`[Request] Timeout for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog} (Time: ${duration}ms)`);
-                        if (attempt < this.maxRetries) {
-                            logger.warn(`[Request] Retrying timeout in ${delay.toFixed(0)}ms...`);
-                             await new Promise(resolve => setTimeout(resolve, delay));
-                        } else {
-                             logger.error(`[Request] Final attempt failed due to timeout.`);
-                             throw error; 
-                        }
-                    } else {
-                        logger.error(`[Request] Network Error for ${url.split('?')[0]} key line ${keyLineNum}${logItemId}${attemptLog}: ${error.message}`);
-                         throw error; 
-                    }
-                } finally {
-                     if (key && keyAcquired) { 
-                         if (this.keyLocks.has(key)) {
-                             this.keyLocks.set(key, false);
-                         }
-                     }
-                }
-
-                attempt++;
-            } // === End Retry Loop ===
-            
-            logger.error(`[Request] Max retries (${this.maxRetries + 1}) reached for ${url.split('?')[0]}. Last error: ${lastError?.message}`);
-            throw lastError || new Error('Max retries reached or unknown error');
-
-        } finally {
-            this.semaphore.release(); 
-        }
+        logger.info(`APIManager: Initialized with ${this.keys.length} API keys`);
+        
+        // Set concurrency limit based on key count
+        this.maxConcurrentRequests = Math.max(3, 3 * this.keys.length);
+        this.concurrencySemaphore = new AsyncSemaphore(this.maxConcurrentRequests);
+        logger.info(`APIManager: Set concurrency limit to ${this.maxConcurrentRequests}`);
+        
+        return true;
     }
-
-    // Internal helper to get a key ensuring per-key delay
-    async _getAvailableKey(requestType = 'standard') {
-        while (true) {
-            let availableKey = null;
-            let earliestNextAvailableTime = Infinity;
-            const now = Date.now();
-
-            // Define cooldown times for different request types
-            const cooldownTimes = {
-                'category_search': 3100,     // 3.1 seconds for category search API
-                'inventory_detail': 2500,    // 2.5 seconds for inventory details endpoint
-                'account_detail': 1500,      // 1.5 seconds for account details
-                'standard': 1000            // 1 second for regular requests
-            };
-            
-            // Get the appropriate cooldown time based on request type
-            const requestCooldown = cooldownTimes[requestType] || cooldownTimes.standard;
-
-            for (const key of this.keys) {
-                if (this.keyLocks.get(key)) {
-                     continue; // Skip locked keys
-                }
-
-                // Calculate time needed for general rate limit
-                const lastTimeGeneral = this.keyLastRequestTime.get(key) || 0;
-                const minIntervalGeneral = (60 * 1000) / this.rateLimit;
-                const nextAvailableGeneral = lastTimeGeneral + minIntervalGeneral;
-
-                // Calculate time needed for specific endpoint cooldown
-                let nextAvailableEndpoint = 0;
-                if (requestType === 'category_search') {
-                    const lastTimeCategory = this.keyCategorySearchCooldown.get(key) || 0;
-                    nextAvailableEndpoint = lastTimeCategory + requestCooldown;
-                } else if (requestType === 'inventory_detail') {
-                    const lastTimeInventory = this.keyInventoryDetailsCooldown.get(key) || 0;
-                    nextAvailableEndpoint = lastTimeInventory + requestCooldown;
-                } else if (requestType === 'account_detail') {
-                    const lastTimeAccount = this.keyAccountDetailsCooldown.get(key) || 0;
-                    nextAvailableEndpoint = lastTimeAccount + requestCooldown;
-                } else {
-                    // For standard requests, just use a basic cooldown
-                    nextAvailableEndpoint = lastTimeGeneral + requestCooldown;
-                }
-
-                // Determine when this key will be ready
-                const nextReadyTime = Math.max(nextAvailableGeneral, nextAvailableEndpoint);
-
-                if (now >= nextReadyTime) {
-                    availableKey = key; // Found one ready now
-                    break;
-                }
-                
-                // Track the earliest time any key might be ready
-                earliestNextAvailableTime = Math.min(earliestNextAvailableTime, nextReadyTime);
+    
+    // Determine the endpoint type based on URL patterns 
+    getEndpointType(endpoint) {
+        // Check for steam inventory value endpoint
+        if (endpoint.includes('/steam-value/')) {
+            return 'steam_value';
+        }
+        
+        // Check for category/search methods
+        if (endpoint.includes('/steam') || endpoint.includes('/category')) {
+            return 'category_search';
+        }
+        
+        // Default to standard rate limit
+        return 'standard';
+    }
+    
+    // Log the endpoint type
+    logEndpointType(endpoint, endpointType) {
+        logger.debug(`[${endpointType}] Endpoint: ${endpoint}`);
+    }
+    
+    // Get next available timestamp for a specific key and endpoint type
+    _getNextAvailableTime(apiKey, endpointType) {
+        const now = Date.now();
+        const lastTime = this.lastRequestTime[apiKey][endpointType] || 0;
+        const cooldown = this.cooldowns[endpointType];
+        return Math.max(now, lastTime + cooldown);
+    }
+    
+    // Find the best key to use for the given endpoint
+    async _getBestKey(endpointType) {
+        // If no keys, throw error
+        if (this.keys.length === 0) {
+            throw new Error('No API keys available');
+        }
+        
+        const now = Date.now();
+        let bestKey = null;
+        let earliestTime = Infinity;
+        
+        // Find the key with the earliest available time
+        for (const key of this.keys) {
+            const nextAvailableTime = this._getNextAvailableTime(key, endpointType);
+            if (nextAvailableTime < earliestTime) {
+                earliestTime = nextAvailableTime;
+                bestKey = key;
             }
-
-            if (availableKey) {
-                this.keyLocks.set(availableKey, true);
-                logger.debug(`[APIManager] Acquired lock for key line ${this.keyToLineNumber.get(availableKey)}.`);
-                return availableKey;
-            }
-
-            // If no key is ready, wait until the earliest possible time
-            const waitTime = Math.max(50, earliestNextAvailableTime - now); // Min 50ms wait
-            logger.debug(`[APIManager] All keys cooling down or locked. Waiting approx ${waitTime.toFixed(0)}ms...`);
+        }
+        
+        // If we need to wait, calculate wait time
+        const waitTime = Math.max(0, earliestTime - now);
+        
+        if (waitTime > 0) {
+            logger.debug(`Waiting ${waitTime}ms for key ${bestKey.substring(0, 5)}... (${endpointType} endpoint)`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
         }
+        
+        return bestKey;
     }
-
-    // Internal helper to update timestamp based on request type
-    _updateKeyTimestamp(key, requestType = 'standard') {
-        if (key) {
-            const now = Date.now();
-            // Always update the general request time
-            this.keyLastRequestTime.set(key, now);
-            
-            // Update the specific endpoint cooldown
-            if (requestType === 'category_search') {
-                this.keyCategorySearchCooldown.set(key, now);
-            } else if (requestType === 'inventory_detail') {
-                this.keyInventoryDetailsCooldown.set(key, now);
-            } else if (requestType === 'account_detail') {
-                this.keyAccountDetailsCooldown.set(key, now);
+    
+    // Mark request as in-progress for rate limiting
+    trackRequestStart(apiKey, endpointType) {
+        const now = Date.now();
+        // Update the timestamp for this key and endpoint type
+        this.lastRequestTime[apiKey][endpointType] = now;
+        this.activeRequests++;
+        
+        logger.debug(`Request started (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests}/${this.maxConcurrentRequests})`);
+    }
+    
+    // Mark request as completed
+    trackRequestComplete(apiKey, endpointType) {
+        this.activeRequests = Math.max(0, this.activeRequests - 1);
+        logger.debug(`Request completed (Key: ${apiKey.substring(0, 5)}..., Type: ${endpointType}, Active: ${this.activeRequests}/${this.maxConcurrentRequests})`);
+    }
+    
+    // Acquire a concurrency slot
+    async acquireConcurrencySlot() {
+        return this.concurrencySemaphore.acquire();
+    }
+    
+    // Release a concurrency slot
+    releaseConcurrencySlot(slot) {
+        this.concurrencySemaphore.release(slot);
+    }
+    
+    // The main method to send a rate-limited request
+    async sendRequest(endpoint, method = 'GET', data = {}, contextId = null) {
+        // Determine the endpoint type for rate limiting
+        const endpointType = this.getEndpointType(endpoint);
+        this.logEndpointType(endpoint, endpointType);
+        
+        const requestStart = Date.now();
+        let lastError = null;
+        let attempts = 0;
+        const retries = this.maxRetries;
+        
+        // Get a concurrency slot
+        const concurrencySlot = await this.acquireConcurrencySlot();
+        
+        try {
+            while (attempts < retries) {
+                attempts++;
+                
+                // Get the best API key to use
+                const apiKey = await this._getBestKey(endpointType);
+                
+                // Mark this request as started for the selected key/endpoint type
+                this.trackRequestStart(apiKey, endpointType);
+                
+                try {
+                    // Set up the request with the chosen API key
+                    const config = {
+                        method,
+                        url: endpoint,
+                        timeout: this.requestTimeoutMs,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Api-Key': apiKey
+                        }
+                    };
+                    
+                    if (method.toUpperCase() !== 'GET' && data) {
+                        config.data = data;
+                    }
+                    
+                    // Make the request
+                    const response = await axios(config);
+                    
+                    // Calculate and log request duration
+                    const duration = Date.now() - requestStart;
+                    logger.debug(`API request completed in ${duration}ms for endpoint: ${endpoint}`);
+                    
+                    // Request successful - mark as completed and reset key cooldown
+                    this.trackRequestComplete(apiKey, endpointType);
+                    return response.data;
+                } catch (error) {
+                    lastError = error;
+                    
+                    // Always mark request as complete even if it failed
+                    this.trackRequestComplete(apiKey, endpointType);
+                    
+                    // Log the error with endpoint information
+                    console.error(`API Request failed for endpoint ${endpoint} (Attempt ${attempts}/${retries}):`, 
+                        error.message || 'Unknown error');
+                    
+                    if (error.response) {
+                        // Handle rate limits (429) or server errors (5xx)
+                        if (error.response.status === 429) {
+                            console.log(`Rate limit hit for key ${apiKey}. Waiting longer before retry...`);
+                            await new Promise(resolve => setTimeout(resolve, this.retryDelay * 3)); // Wait 3x longer on rate limits
+                            continue;
+                        } else if (error.response.status >= 500) {
+                            // Server error, retry after delay
+                            await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                            continue;
+                        }
+                    } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                        // For timeout errors, wait longer before retry
+                        console.log(`Timeout occurred for endpoint ${endpoint}. Waiting before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, this.retryDelay * 2));
+                        continue;
+                    } else if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+                        // Connection reset or refused, wait and retry
+                        console.log(`Connection issue for endpoint ${endpoint}. Waiting before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, this.retryDelay * 2));
+                        continue;
+                    }
+                    
+                    // For other errors, retry with normal delay
+                    await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                }
             }
+
+            // All retries failed
+            throw new Error(`API request to ${endpoint} failed after ${retries} attempts: ${lastError?.message || 'Unknown error'}`);
+        } finally {
+            // Always release the concurrency slot
+            this.releaseConcurrencySlot(concurrencySlot);
         }
     }
 }
 
 // Re-initialize API Manager
-const apiManager = new APIManager('api.keys');
+const apiManager = new APIManager();
 
 // Cache management - Modified loading strategy
 class CacheManager {
@@ -962,8 +915,8 @@ async function getAllItemIds(resumePage = 1) {
 
             const url = `https://api.lzt.market/steam?game[]=252490&no_vac=true&page=${pageToFetch}`;
             
-            // Use category_search request type for pagination
-            const response = await apiManager.sendRequest(url, 'GET', {}, null, 'category_search'); 
+            // Use improved APIManager.sendRequest with correct parameters
+            const response = await apiManager.sendRequest(url, 'GET', {}, null);
             
             // If sendRequest succeeded, process the response
             if (!response?.data) {
@@ -989,7 +942,6 @@ async function getAllItemIds(resumePage = 1) {
             logger.error(`APIManager failed to fetch page ${pageToFetch} after retries: ${error.message}.`);
              return { page: pageToFetch, items: [], error: true }; // Mark as error for processing
         } 
-        // No finally block needed here as APIManager handles semaphore release
     }
 
     // --- Main Loop: Spawn Fetchers & Process Results --- 
@@ -1086,33 +1038,34 @@ async function getAllItemIds(resumePage = 1) {
     return allItems;
 }
 
-// NEW Function to get Steam Inventory Details using the /steam-value endpoint
-async function getSteamInventoryDetails(itemId) {
-    const link = `https://lzt.market/${itemId}/`; // Construct the link parameter
-    const appId = 252490; // Rust App ID
-    const url = `https://prod-api.lzt.market/steam-value?link=${encodeURIComponent(link)}&app_id=${appId}`;
-
-    logger.debug(`[getSteamInventoryDetails ${itemId}] Requesting URL: ${url}`);
-
+// Get inventory details for an item from the Steam Value API
+async function getSteamInventoryDetails(itemId, options = {}) {
     try {
-        // Using apiManager.sendRequest with inventory_detail request type
-        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, 'inventory_detail'); 
-
-        // Log the entire raw response data for inspection
-        logger.debug(`[getSteamInventoryDetails ${itemId}] Raw API Response Data: ${JSON.stringify(response?.data, null, 2)}`);
-
-        if (response?.data) { // Check if we got any data
-            // We expect the data structure to be something like: { items: [], totalValue: X, itemCount: Y ... }
-            // We will return the whole data object for now to be processed in autoRefresh
-            logger.debug(`Successfully fetched Steam inventory details for item ${itemId}`);
-            return response.data; 
-        } else {
-            logger.warn(`Steam inventory details structure unexpected or missing for ${itemId}. Response: ${JSON.stringify(response?.data)}`);
+        if (!itemId) {
+            logger.error('[getSteamInventoryDetails] Invalid itemId provided');
             return null;
         }
+        
+        const baseUrl = 'https://api.lzt.market/steam-value';
+        const url = `${baseUrl}/${itemId.replace('/', '%2F')}`;
+        
+        logger.debug(`[API] Queuing Steam value request for item: ${itemId}`);
+        const startTime = Date.now();
+        
+        // Use the improved APIManager that handles rate limits properly
+        const data = await apiManager.sendRequest(url, 'GET', {}, itemId);
+        
+        const duration = Date.now() - startTime;
+        logger.debug(`[API] Steam value response received in ${duration}ms for item: ${itemId}`);
+        
+        // Log API response data at debug level
+        if (data) {
+            logger.debug(`[API] Steam value response for ${itemId}: ${JSON.stringify(data).substring(0, 200)}...`);
+        }
+        
+        return data;
     } catch (error) {
-        // Error logging is handled within sendRequest
-        logger.error(`getSteamInventoryDetails failed for ${itemId} after retries: ${error.message}`);
+        logger.error(`[API] Error getting Steam value for item ${itemId}: ${error.message}`);
         return null;
     }
 }
@@ -1122,8 +1075,8 @@ async function getAccountDetails(itemId) {
     const url = `https://api.lzt.market/${itemId}`;
     logger.debug(`[getAccountDetails ${itemId}] Requesting URL: ${url}`);
     try {
-        // Use apiManager with account_detail request type
-        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, 'account_detail');
+        // Use apiManager for rate limiting, retries, etc.
+        const response = await apiManager.sendRequest(url, 'GET', {}, itemId);
         
         // Log the raw response data for inspection
         logger.debug(`[getAccountDetails ${itemId}] Raw API Response Data: ${JSON.stringify(response?.data, null, 2)}`); 
