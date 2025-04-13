@@ -14129,3 +14129,25 @@
 {"level":"info","message":"HTTPS Server is running on port 443 for panel.auth0ai.fun","timestamp":"2025-04-13T01:23:30.878Z"}
 {"level":"info","message":"HTTP server listening on port 3000 for redirection to HTTPS.","timestamp":"2025-04-13T01:23:30.879Z"}
 {"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T01:23:33.431Z"}
+{"level":"info","message":"Loaded persistent statistics from stats.json","timestamp":"2025-04-13T02:14:19.624Z"}
+{"level":"info","message":"[APIManager] Initialized with 3 keys and concurrency limit of 3","timestamp":"2025-04-13T02:14:19.629Z"}
+{"level":"info","message":"Initialized cache update log stream: cache_updates.log","timestamp":"2025-04-13T02:14:19.629Z"}
+{"level":"info","message":"[CacheManager] Starting cache load process...","timestamp":"2025-04-13T02:14:19.629Z"}
+{"level":"info","message":"[CacheManager] Attempting to load cache from snapshot file: cache.json","timestamp":"2025-04-13T02:14:19.629Z"}
+{"level":"info","message":"[CacheManager] Snapshot file read in 25ms.","timestamp":"2025-04-13T02:14:19.656Z"}
+{"level":"info","message":"[CacheManager] Cache load process finished in 44ms. Final cache size: 1943 items.","timestamp":"2025-04-13T02:14:19.673Z"}
+{"level":"info","message":"SSL Certificates loaded successfully from /Users/alex/Desktop/herb-panel/certs","timestamp":"2025-04-13T02:14:19.674Z"}
+{"level":"info","message":"HTTPS Server is running on port 443 for panel.auth0ai.fun","timestamp":"2025-04-13T02:14:19.692Z"}
+{"level":"info","message":"HTTP server listening on port 3000 for redirection to HTTPS.","timestamp":"2025-04-13T02:14:19.692Z"}
+{"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T02:14:24.993Z"}
+{"level":"info","message":"Loaded persistent statistics from stats.json","timestamp":"2025-04-13T02:14:28.282Z"}
+{"level":"info","message":"[APIManager] Initialized with 3 keys and concurrency limit of 3","timestamp":"2025-04-13T02:14:28.284Z"}
+{"level":"info","message":"Initialized cache update log stream: cache_updates.log","timestamp":"2025-04-13T02:14:28.284Z"}
+{"level":"info","message":"[CacheManager] Starting cache load process...","timestamp":"2025-04-13T02:14:28.284Z"}
+{"level":"info","message":"[CacheManager] Attempting to load cache from snapshot file: cache.json","timestamp":"2025-04-13T02:14:28.284Z"}
+{"level":"info","message":"[CacheManager] Snapshot file read in 20ms.","timestamp":"2025-04-13T02:14:28.306Z"}
+{"level":"info","message":"[CacheManager] Cache load process finished in 41ms. Final cache size: 1943 items.","timestamp":"2025-04-13T02:14:28.325Z"}
+{"level":"info","message":"SSL Certificates loaded successfully from /Users/alex/Desktop/herb-panel/certs","timestamp":"2025-04-13T02:14:28.325Z"}
+{"level":"info","message":"HTTPS Server is running on port 443 for panel.auth0ai.fun","timestamp":"2025-04-13T02:14:28.339Z"}
+{"level":"info","message":"HTTP server listening on port 3000 for redirection to HTTPS.","timestamp":"2025-04-13T02:14:28.340Z"}
+{"level":"info","message":"SIGINT signal received: Closing connections and saving state...","timestamp":"2025-04-13T02:14:45.858Z"}

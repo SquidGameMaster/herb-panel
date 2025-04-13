@@ -152,9 +152,9 @@ class APIManager {
             this.semaphore = new Sema(1);
             logger.warn('[APIManager] No keys loaded, setting concurrency limit to 1.');
         }
-        this.maxRetries = 2; // Keep retries
-        this.baseRetryDelay = 1500; // Base delay for FIRST retry (increased slightly)
-        this.requestTimeout = 30000; // Increase request timeout back to 30 seconds
+        this.maxRetries = 3; // Increase retries
+        this.baseRetryDelay = 1500; 
+        this.requestTimeout = 7000; // Short timeout
         
         // --- RE-ENABLE httpsAgent with moderate settings AND TLS options ---
         this.httpsAgent = new https.Agent({
@@ -1089,7 +1089,8 @@ async function getSteamInventoryDetails(itemId) {
 
     try {
         // Using apiManager.sendRequest which handles keys, rate limits, retries
-        const response = await apiManager.sendRequest(url, 'GET', {}, itemId); 
+        // *** Add isCategorySearch = true to apply the 3.1s cooldown ***
+        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, true); 
 
         // Log the entire raw response data for inspection
         logger.debug(`[getSteamInventoryDetails ${itemId}] Raw API Response Data: ${JSON.stringify(response?.data, null, 2)}`);
