@@ -134,7 +134,9 @@ class APIManager {
         this.keys = [];
         this.rateLimit = rateLimit; // General limit (requests per minute per key - maybe adjust?)
         this.keyLastRequestTime = new Map();
-        this.keyCategorySearchCooldown = new Map(); // <<< NEW: Track last category search time per key
+        this.keyCategorySearchCooldown = new Map(); // For category search (3.1s cooldown)
+        this.keyInventoryDetailsCooldown = new Map(); // For inventory detail endpoint (2.5s cooldown)
+        this.keyAccountDetailsCooldown = new Map(); // For account details endpoint (1.5s cooldown)
         this.keyToLineNumber = new Map();
         this.keyLocks = new Map();
         this.loadKeys(keysFile);
@@ -144,7 +146,9 @@ class APIManager {
             this.keys.forEach(key => {
                 this.keyLocks.set(key, false);
                 this.keyLastRequestTime.set(key, 0);
-                this.keyCategorySearchCooldown.set(key, 0); // <<< NEW: Initialize cooldown map
+                this.keyCategorySearchCooldown.set(key, 0);
+                this.keyInventoryDetailsCooldown.set(key, 0);
+                this.keyAccountDetailsCooldown.set(key, 0);
             });
             logger.info(`[APIManager] Initialized with ${this.keys.length} keys and concurrency limit of ${this.keys.length}`);
         } else {
@@ -152,14 +156,14 @@ class APIManager {
             this.semaphore = new Sema(1);
             logger.warn('[APIManager] No keys loaded, setting concurrency limit to 1.');
         }
-        this.maxRetries = 3; // Increase retries
-        this.baseRetryDelay = 1500; 
-        this.requestTimeout = 7000; // Short timeout
+        this.maxRetries = 2; // Reduce retries from 3 to 2 to avoid excessive wait time
+        this.baseRetryDelay = 1000; // Reduced from 1500ms
+        this.requestTimeout = 15000; // Increased timeout from 7000ms to 15000ms
         
         // --- RE-ENABLE httpsAgent with moderate settings AND TLS options ---
         this.httpsAgent = new https.Agent({
             keepAlive: true,
-            maxSockets: 100, 
+            maxSockets: 50, // Reduced from 100 to avoid overwhelming connections
             keepAliveMsecs: 15000, // Keep sockets alive for 15 seconds
             timeout: 20000,
             // --- Force TLSv1.2+ --- 
@@ -178,7 +182,9 @@ class APIManager {
                 if (key) {
                     this.keys.push(key);
                     this.keyLastRequestTime.set(key, 0);
-                    this.keyCategorySearchCooldown.set(key, 0); // <<< NEW: Initialize cooldown map
+                    this.keyCategorySearchCooldown.set(key, 0);
+                    this.keyInventoryDetailsCooldown.set(key, 0);
+                    this.keyAccountDetailsCooldown.set(key, 0);
                     this.keyToLineNumber.set(key, index + 1);
                     this.keyLocks.set(key, false);
                     loadedKeys++;
@@ -193,14 +199,13 @@ class APIManager {
     }
 
     // Main function to send requests, handles semaphore, per-key delay, and retries
-    async sendRequest(url, method = 'GET', options = {}, itemId = null, isCategorySearch = false) {
+    async sendRequest(url, method = 'GET', options = {}, itemId = null, requestType = 'standard') {
         if (this.keys.length === 0) {
             logger.error('[APIManager] No API keys available to send request.');
             throw new Error('No API keys loaded');
         }
 
         await this.semaphore.acquire();
-        // logger.debug(`[APIManager] Semaphore acquired for ${url.split('?')[0]}. Remaining permits: ${this.semaphore.nrWaiting()} waiting.`); // Reduced verbosity
         
         let attempt = 0;
         let lastError = null;
@@ -214,14 +219,14 @@ class APIManager {
                 let keyAcquired = false;
                 
                 try {
-                    key = await this._getAvailableKey(isCategorySearch); 
+                    key = await this._getAvailableKey(requestType); 
                     keyAcquired = true;
                     const keyLineNum = this.keyToLineNumber.get(key) || 'Unknown';
                     const logItemId = itemId ? ` (Item: ${itemId})` : '';
                     const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`; 
-                    const categoryLog = isCategorySearch ? ' [Category Search]' : '';
+                    const requestTypeLog = requestType !== 'standard' ? ` [${requestType}]` : '';
 
-                    logger.debug(`[Request] Key line ${keyLineNum} sending request${categoryLog}${logItemId}${attemptLog} to ${url.split('?')[0]}`);
+                    logger.debug(`[Request] Key line ${keyLineNum} sending request${requestTypeLog}${logItemId}${attemptLog} to ${url.split('?')[0]}`);
                     startTime = Date.now(); // Set start time JUST before the request
 
                     // --- Axios Call --- 
@@ -232,49 +237,41 @@ class APIManager {
                             accept: 'application/json',
                             authorization: `Bearer ${key}`
                         },
-                        timeout: this.requestTimeout, // Use the shorter timeout
-                        // --- Use the re-enabled agent --- 
-                        httpAgent: this.httpsAgent, // Use agent for http too if needed, else false
+                        timeout: this.requestTimeout,
+                        httpAgent: this.httpsAgent,
                         httpsAgent: this.httpsAgent,
-                        // --- End Agent --- 
                         ...options
                     });
 
-                    this._updateKeyTimestamp(key, isCategorySearch); 
+                    this._updateKeyTimestamp(key, requestType); 
                     const duration = Date.now() - startTime;
-                    logger.info(`[Request] Success for ${url.split('?')[0]} key line ${keyLineNum}${categoryLog}${logItemId} (Status: ${response.status}, Time: ${duration}ms)`);
+                    logger.info(`[Request] Success for ${url.split('?')[0]} key line ${keyLineNum}${requestTypeLog}${logItemId} (Status: ${response.status}, Time: ${duration}ms)`);
                     return response; 
 
                 } catch (error) {
-                    // --- Error Handling for Attempt --- 
                     // Update timestamp even on failure, key was used
                     if (key) { 
-                        this._updateKeyTimestamp(key, isCategorySearch); 
+                        this._updateKeyTimestamp(key, requestType); 
                     }
                     
-                    // --- SAFELY Calculate Duration --- 
                     let duration = -1; 
                     const keyLineNum = key ? (this.keyToLineNumber.get(key) || 'Unknown') : 'N/A';
                     const logItemId = itemId ? ` (Item: ${itemId})` : '';
                     const attemptLog = ` (Attempt ${attempt + 1}/${this.maxRetries + 1})`;
                     
-                    if (startTime) { // Check if startTime was set before the error
+                    if (startTime) {
                         duration = Date.now() - startTime;
                     } else {
-                        // Log if startTime wasn't set (error happened before/during request start)
                         logger.warn(`[Request] Error likely occurred before startTime was set for key ${keyLineNum}${logItemId}${attemptLog}. Duration cannot be calculated.`);
                     }
-                    // --- End Safe Duration Calc ---
 
                     lastError = error; 
 
-                    // --- Calculate Delay --- 
                     let delay = this.baseRetryDelay; // Start with base delay
-                    if (attempt > 0) { // Exponential backoff for subsequent retries
+                    if (attempt > 0) {
                         delay = this.baseRetryDelay * Math.pow(2, attempt); 
                     }
                     delay += (Math.random() * 500); // Add jitter
-                    // --- End Delay Calculation --- 
 
                     if (error.response) {
                         const status = error.response.status;
@@ -288,7 +285,6 @@ class APIManager {
                             const delay429 = 1500 + Math.random() * 1000; 
                             logger.warn(`[Request] Rate limit (429) hit. Applying extra delay (${delay429.toFixed(0)}ms) before next attempt.`);
                             await new Promise(resolve => setTimeout(resolve, delay429));
-                            // Note: We might still want to increment attempt here or break if 429 persists?
                         }
                         else if (status >= 500 && status < 600) {
                              if (attempt < this.maxRetries) {
@@ -320,7 +316,6 @@ class APIManager {
                      if (key && keyAcquired) { 
                          if (this.keyLocks.has(key)) {
                              this.keyLocks.set(key, false);
-                             // logger.debug(`[APIManager] Released lock for key line ${this.keyToLineNumber.get(key)} after attempt ${attempt + 1}.`); // Reduced verbosity
                          }
                      }
                 }
@@ -332,48 +327,63 @@ class APIManager {
             throw lastError || new Error('Max retries reached or unknown error');
 
         } finally {
-            // logger.debug(`[APIManager] Releasing semaphore for ${url.split('?')[0]}.`); // Reduced verbosity
             this.semaphore.release(); 
         }
     }
 
     // Internal helper to get a key ensuring per-key delay
-    async _getAvailableKey(isCategorySearch = false) {
-        // const BUFFER_MS = 20; // <<< REMOVED safety buffer
+    async _getAvailableKey(requestType = 'standard') {
         while (true) {
             let availableKey = null;
             let earliestNextAvailableTime = Infinity;
             const now = Date.now();
+
+            // Define cooldown times for different request types
+            const cooldownTimes = {
+                'category_search': 3100,     // 3.1 seconds for category search API
+                'inventory_detail': 2500,    // 2.5 seconds for inventory details endpoint
+                'account_detail': 1500,      // 1.5 seconds for account details
+                'standard': 1000            // 1 second for regular requests
+            };
+            
+            // Get the appropriate cooldown time based on request type
+            const requestCooldown = cooldownTimes[requestType] || cooldownTimes.standard;
 
             for (const key of this.keys) {
                 if (this.keyLocks.get(key)) {
                      continue; // Skip locked keys
                 }
 
-                // Calculate time needed for general rate limit (if applicable)
+                // Calculate time needed for general rate limit
                 const lastTimeGeneral = this.keyLastRequestTime.get(key) || 0;
-                const minIntervalGeneral = (60 * 1000) / this.rateLimit; // Using the constructor's rateLimit
+                const minIntervalGeneral = (60 * 1000) / this.rateLimit;
                 const nextAvailableGeneral = lastTimeGeneral + minIntervalGeneral;
 
-                // Calculate time needed for category search cooldown (if applicable)
-                let nextAvailableCategory = 0;
-                if (isCategorySearch) {
+                // Calculate time needed for specific endpoint cooldown
+                let nextAvailableEndpoint = 0;
+                if (requestType === 'category_search') {
                     const lastTimeCategory = this.keyCategorySearchCooldown.get(key) || 0;
-                    const minIntervalCategory = 3100; // 3.1 seconds enforced
-                    nextAvailableCategory = lastTimeCategory + minIntervalCategory;
+                    nextAvailableEndpoint = lastTimeCategory + requestCooldown;
+                } else if (requestType === 'inventory_detail') {
+                    const lastTimeInventory = this.keyInventoryDetailsCooldown.get(key) || 0;
+                    nextAvailableEndpoint = lastTimeInventory + requestCooldown;
+                } else if (requestType === 'account_detail') {
+                    const lastTimeAccount = this.keyAccountDetailsCooldown.get(key) || 0;
+                    nextAvailableEndpoint = lastTimeAccount + requestCooldown;
+                } else {
+                    // For standard requests, just use a basic cooldown
+                    nextAvailableEndpoint = lastTimeGeneral + requestCooldown;
                 }
 
-                // Determine the actual time this key will be ready
-                const nextReadyTime = Math.max(nextAvailableGeneral, nextAvailableCategory);
+                // Determine when this key will be ready
+                const nextReadyTime = Math.max(nextAvailableGeneral, nextAvailableEndpoint);
 
-                // <<< MODIFIED: Removed buffer check >>>
                 if (now >= nextReadyTime) {
                     availableKey = key; // Found one ready now
                     break;
                 }
                 
-                // If not ready, track the earliest time *any* key might be ready
-                // <<< MODIFIED: Use original time for wait calculation >>>
+                // Track the earliest time any key might be ready
                 earliestNextAvailableTime = Math.min(earliestNextAvailableTime, nextReadyTime);
             }
 
@@ -384,23 +394,26 @@ class APIManager {
             }
 
             // If no key is ready, wait until the earliest possible time
-            // <<< MODIFIED: Use original earliest time for wait calculation >>>
             const waitTime = Math.max(50, earliestNextAvailableTime - now); // Min 50ms wait
             logger.debug(`[APIManager] All keys cooling down or locked. Waiting approx ${waitTime.toFixed(0)}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
         }
     }
 
-    // Internal helper to update timestamp safely
-    _updateKeyTimestamp(key, isCategorySearch = false) {
-        if (key && this.keyLastRequestTime.has(key)) {
+    // Internal helper to update timestamp based on request type
+    _updateKeyTimestamp(key, requestType = 'standard') {
+        if (key) {
             const now = Date.now();
+            // Always update the general request time
             this.keyLastRequestTime.set(key, now);
-            if (isCategorySearch) {
+            
+            // Update the specific endpoint cooldown
+            if (requestType === 'category_search') {
                 this.keyCategorySearchCooldown.set(key, now);
-                // logger.debug(`[APIManager] Updated GENERAL and CATEGORY timestamps for key line ${this.keyToLineNumber.get(key)}.`);
-            } else {
-                // logger.debug(`[APIManager] Updated GENERAL timestamp for key line ${this.keyToLineNumber.get(key)}.`);
+            } else if (requestType === 'inventory_detail') {
+                this.keyInventoryDetailsCooldown.set(key, now);
+            } else if (requestType === 'account_detail') {
+                this.keyAccountDetailsCooldown.set(key, now);
             }
         }
     }
@@ -942,20 +955,15 @@ async function getAllItemIds(resumePage = 1) {
     async function fetchPage(pageToFetch) {
         if (isDone) return null;
 
-        // APIManager.sendRequest handles semaphore acquisition/release internally
-        // logger.debug(`[fetchPage ${pageToFetch}] Attempting to acquire key via APIManager...`); 
-
         try {
             if (forceStopCycle || isDone) {
-                 // logger.debug(`[fetchPage ${pageToFetch}] Cycle stopped or already done, skipping fetch.`);
                  return null;
             }
 
             const url = `https://api.lzt.market/steam?game[]=252490&no_vac=true&page=${pageToFetch}`;
             
-            // <<< Use APIManager.sendRequest with isCategorySearch = true >>>
-            // It handles key selection, cooldowns, retries, and semaphore
-            const response = await apiManager.sendRequest(url, 'GET', {}, null, true); 
+            // Use category_search request type for pagination
+            const response = await apiManager.sendRequest(url, 'GET', {}, null, 'category_search'); 
             
             // If sendRequest succeeded, process the response
             if (!response?.data) {
@@ -973,7 +981,6 @@ async function getAllItemIds(resumePage = 1) {
                 }));
                 return { page: pageToFetch, items: processed, error: false };
             } else {
-                // logger.info(`Page ${pageToFetch} was empty.`); // Reduce log spam
                 return { page: pageToFetch, items: [], error: false };
             }
 
@@ -1088,9 +1095,8 @@ async function getSteamInventoryDetails(itemId) {
     logger.debug(`[getSteamInventoryDetails ${itemId}] Requesting URL: ${url}`);
 
     try {
-        // Using apiManager.sendRequest which handles keys, rate limits, retries
-        // *** Add isCategorySearch = true to apply the 3.1s cooldown ***
-        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, true); 
+        // Using apiManager.sendRequest with inventory_detail request type
+        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, 'inventory_detail'); 
 
         // Log the entire raw response data for inspection
         logger.debug(`[getSteamInventoryDetails ${itemId}] Raw API Response Data: ${JSON.stringify(response?.data, null, 2)}`);
@@ -1116,8 +1122,8 @@ async function getAccountDetails(itemId) {
     const url = `https://api.lzt.market/${itemId}`;
     logger.debug(`[getAccountDetails ${itemId}] Requesting URL: ${url}`);
     try {
-        // Use apiManager for rate limiting, retries, etc.
-        const response = await apiManager.sendRequest(url, 'GET', {}, itemId);
+        // Use apiManager with account_detail request type
+        const response = await apiManager.sendRequest(url, 'GET', {}, itemId, 'account_detail');
         
         // Log the raw response data for inspection
         logger.debug(`[getAccountDetails ${itemId}] Raw API Response Data: ${JSON.stringify(response?.data, null, 2)}`); 
