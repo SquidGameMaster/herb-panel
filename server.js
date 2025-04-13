@@ -154,7 +154,7 @@ class APIManager {
         // Track in-progress requests 
         this.activeRequests = 0;
         this.maxConcurrentRequests = 12; // Maximum number of concurrent requests
-        this.concurrencySemaphore = new AsyncSemaphore(12); // Limit concurrency across all keys
+        this.concurrencySemaphore = new Sema(12); // Limit concurrency across all keys
     }
     
     // Method to initialize API keys
@@ -182,7 +182,7 @@ class APIManager {
         
         // Set concurrency limit based on key count
         this.maxConcurrentRequests = Math.max(3, 3 * this.keys.length);
-        this.concurrencySemaphore = new AsyncSemaphore(this.maxConcurrentRequests);
+        this.concurrencySemaphore = new Sema(this.maxConcurrentRequests);
         logger.info(`APIManager: Set concurrency limit to ${this.maxConcurrentRequests}`);
         
         return true;
