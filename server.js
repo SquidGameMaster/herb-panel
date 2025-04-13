@@ -375,6 +375,24 @@ class APIManager {
 // Re-initialize API Manager
 const apiManager = new APIManager();
 
+// Load API keys from file and initialize the manager
+try {
+    const keysFilePath = 'api.keys';
+    if (fs.existsSync(keysFilePath)) {
+        const fileContent = fs.readFileSync(keysFilePath, 'utf8');
+        const apiKeys = fileContent.split('\n').map(k => k.trim()).filter(k => k && !k.startsWith('#'));
+        if (apiKeys.length > 0) {
+            apiManager.initializeKeys(apiKeys);
+        } else {
+            logger.error('No valid API keys found in api.keys file. API requests will fail.');
+        }
+    } else {
+        logger.error('api.keys file not found. API requests will fail.');
+    }
+} catch (error) {
+    logger.error(`Failed to load or initialize API keys: ${error.message}`);
+}
+
 // Cache management - Modified loading strategy
 class CacheManager {
     constructor(logFile, finalCacheFile) {
@@ -448,7 +466,7 @@ class CacheManager {
         // If snapshot loading failed or file was empty/missing, attempt to load from log
         if (!loadedFromSnapshot) {
             logger.info('[CacheManager] Snapshot load failed or cache empty, attempting reconstruction from log file...');
-            this.loadCacheFromLog();
+        this.loadCacheFromLog();
         }
 
         const totalLoadTime = Date.now() - loadStartTime;
@@ -725,7 +743,7 @@ async function autoRefresh(resumeState = null) {
                 if (cacheManager.removeItem(itemId)) {
                     counters.items_removed++;
                     // Maybe limit broadcasts here too if it becomes spammy
-                    broadcast({ type: 'update', item_id: itemId, status: 'removed' }); 
+                    broadcast({ type: 'update', item_id: itemId, status: 'removed' });
                 }
                 // Update progress within loop if needed (might be fast)
                 // currentProgress = 30 + Math.round(((i + 1) / totalToRemove) * 5); // Allocate 5% to this phase
@@ -754,7 +772,7 @@ async function autoRefresh(resumeState = null) {
                  const item = addedItems[i];
                  
                  // Check for interruption before processing this item
-                 if (forceStopCycle) {
+                if (forceStopCycle) {
                     if (isPausedByUser) {
                         pausedCycleState = { phase: 'process_added', data: { addedItems, removedItems, currentAddedIndex: i, allItemsInfo } }; 
                         logger.info(`Saving state before processing added item index ${i} and pausing.`);
@@ -776,7 +794,7 @@ async function autoRefresh(resumeState = null) {
 
                     if (inventoryDetails) {
                         // Combine and add to cache (logic remains the same)
-                        const combinedData = {
+                            const combinedData = {
                             price: item.price,
                             query: item.query,
                             total_value: inventoryDetails?.data?.totalValue || 0,
@@ -786,11 +804,11 @@ async function autoRefresh(resumeState = null) {
                             steam_country: accountDetails?.steam_country || null,
                             rust_playtime_forever: accountDetails?.steam_full_games?.list?.['252490']?.playtime_forever || 0,
                             steam_transactions: (accountDetails?.steamTransactions || []).map(t => t.product).filter(p => p),
-                        };
-                        cacheManager.addOrUpdateItem(item.item_id, combinedData);
-                        counters.items_added++;
+                            };
+                            cacheManager.addOrUpdateItem(item.item_id, combinedData);
+                            counters.items_added++; 
                         // Optionally: broadcast individual item addition here if needed
-                    } else {
+                        } else {
                         logger.warn(`Failed to get essential Steam INVENTORY details for added item ${item.item_id}. Account details: ${accountDetails ? 'OK' : 'Failed/Null'}. Cannot add to cache.`);
                     }
                 } catch (error) {
@@ -805,15 +823,15 @@ async function autoRefresh(resumeState = null) {
                 
                 if (itemsProcessedSinceLastUpdate >= PROGRESS_UPDATE_INTERVAL || overallTotalProcessed === totalAddedToProcess) {
                     currentProgress = 35 + Math.round((overallTotalProcessed / totalAddedToProcess) * 60); 
-                    const timeElapsed = Date.now() - processing_start_time;
+                     const timeElapsed = Date.now() - processing_start_time;
                     
                     // Estimate ETA based on items processed in this run
                     if (totalItemsProcessed > 0) { 
                         estimatedTotalTime = (timeElapsed / totalItemsProcessed) * (totalAddedToProcess - startAddedIndex);
                         const estimatedRemaining = estimatedTotalTime - timeElapsed;
-                        broadcast({
-                            type: 'progress',
-                            phase: 'process_added',
+                     broadcast({
+                        type: 'progress',
+                        phase: 'process_added',
                             message: `Processed ${overallTotalProcessed}/${totalAddedToProcess} added items...`,
                             progress: Math.min(95, currentProgress),
                             eta: estimatedRemaining > 0 ? (estimatedRemaining / 1000).toFixed(0) : 0
@@ -846,7 +864,7 @@ async function autoRefresh(resumeState = null) {
         const timeTaken = (runEndTime - runStartTime) / 1000;
         stats.last_run_duration = timeTaken;
         stats.total_runs++;
-        stats.total_items_found_all_time += counters.items_added; 
+        stats.total_items_found_all_time += counters.items_added;
         stats.average_run_time = ((stats.average_run_time * (stats.total_runs - 1)) + timeTaken) / stats.total_runs;
         saveStats();
 
@@ -913,8 +931,8 @@ async function getAllItemIds(resumePage = 1) {
                  return null;
             }
 
-            const url = `https://api.lzt.market/steam?game[]=252490&no_vac=true&page=${pageToFetch}`;
-            
+        const url = `https://api.lzt.market/steam?game[]=252490&no_vac=true&page=${pageToFetch}`;
+        
             // Use improved APIManager.sendRequest with correct parameters
             const response = await apiManager.sendRequest(url, 'GET', {}, null);
             
@@ -924,16 +942,16 @@ async function getAllItemIds(resumePage = 1) {
                 return { page: pageToFetch, items: [], error: false }; // Not a fetch error per se
             }
 
-            const items = response.data.items || [];
+                const items = response.data.items || [];
             if (items.length > 0) {
-                const processed = items.map(item => ({
-                    item_id: String(item.item_id),
-                    price: item.price,
-                    steam_last_activity: item.account_last_activity,
-                    query: item.query
-                }));
+                     const processed = items.map(item => ({
+                        item_id: String(item.item_id),
+                        price: item.price,
+                        steam_last_activity: item.account_last_activity,
+                        query: item.query
+                    }));
                 return { page: pageToFetch, items: processed, error: false };
-            } else {
+                } else {
                 return { page: pageToFetch, items: [], error: false };
             }
 
@@ -958,7 +976,7 @@ async function getAllItemIds(resumePage = 1) {
             
             if (!isDone) {
                  fetchPromises.push(fetchPage(currentPage));
-                 currentPage++;
+        currentPage++;
                  if (currentPage > 10000) { 
                     logger.error('Reached page 10000, assuming error or infinite loop. Stopping pagination.');
                     isDone = true; 
@@ -1656,11 +1674,11 @@ process.on('SIGINT', () => {
          
          // Function to close the main server (HTTPS or HTTP)
          const closeMainServer = (callback) => {
-             server.close((err) => {
-                 if (err) {
+         server.close((err) => {
+             if (err) {
                      logger.error('Error closing main server:', err);
                      callback(err); // Pass error to final exit logic
-                 } else {
+             } else {
                      logger.info('Main server closed successfully.');
                      callback();
                  }
